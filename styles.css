@@ -514,6 +514,20 @@ h1 {
   border-radius: 3px;
 }
 
+.download-progress {
+  margin-bottom: 12px;
+  padding: 10px;
+  background: #2b2d31;
+  border-radius: 6px;
+}
+
+.download-text {
+  font-size: 12px;
+  color: #949ba4;
+  margin-bottom: 8px;
+  text-align: center;
+}
+
 .status {
   margin-top: 12px;
   padding: 8px 12px;

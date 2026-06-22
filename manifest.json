@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Discord Media Scraper",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Scrape and download images, videos, zip files, and text from Discord channels",
   "permissions": [
     "storage",
@@ -23,6 +23,7 @@
     "128": "icons/icon128.png"
   },
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background.js",
+    "scripts": ["jszip.min.js", "background.js"]
   }
 }

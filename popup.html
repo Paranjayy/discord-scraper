@@ -49,9 +49,9 @@
           <div class="filter-group">
             <label>Date Range</label>
             <div class="date-row">
-              <input type="date" id="dateFrom" placeholder="From">
+              <input type="date" id="dateFrom">
               <span>to</span>
-              <input type="date" id="dateTo" placeholder="To">
+              <input type="date" id="dateTo">
             </div>
           </div>
           <div class="filter-group">
@@ -143,10 +143,17 @@
         <div class="progress-fill" id="progressFill"></div>
       </div>
 
+      <div class="download-progress" id="downloadProgress" style="display:none">
+        <div class="download-text" id="downloadText">Preparing download...</div>
+        <div class="progress-bar">
+          <div class="progress-fill" id="downloadFill"></div>
+        </div>
+      </div>
+
       <div class="actions" id="actions" style="display:none">
         <button class="btn btn-download" id="downloadBtn">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
-          Download Media
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2z"/></svg>
+          Download as ZIP
         </button>
         <button class="btn btn-export" id="exportBtn">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
@@ -170,6 +177,7 @@
 
     <div class="status" id="status"></div>
   </div>
+  <script src="jszip.min.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>
