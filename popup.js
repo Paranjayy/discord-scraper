@@ -21,8 +21,16 @@ document.addEventListener('DOMContentLoaded', () => {
   const clearResults = document.getElementById('clearResults');
   const downloadBtn = document.getElementById('downloadBtn');
   const exportBtn = document.getElementById('exportBtn');
-  const exportTextBtn = document.getElementById('exportTextBtn');
+  const exportJsonBtn = document.getElementById('exportJsonBtn');
+  const exportCsvBtn = document.getElementById('exportCsvBtn');
+  const exportTxtBtn = document.getElementById('exportTxtBtn');
   const status = document.getElementById('status');
+  const toggleAdvanced = document.getElementById('toggleAdvanced');
+  const advancedContent = document.getElementById('advancedContent');
+  const dateFrom = document.getElementById('dateFrom');
+  const dateTo = document.getElementById('dateTo');
+  const authorFilter = document.getElementById('authorFilter');
+  const searchFilter = document.getElementById('searchFilter');
 
   const filterImages = document.getElementById('filterImages');
   const filterVideos = document.getElementById('filterVideos');
@@ -41,6 +49,10 @@ document.addEventListener('DOMContentLoaded', () => {
   let abort = false;
   let channels = [];
 
+  const IMAGE_EXT = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg', '.tiff', '.tif'];
+  const VIDEO_EXT = ['.mp4', '.webm', '.mov', '.avi', '.mkv', '.m4v'];
+  const ZIP_EXT = ['.zip', '.rar', '.7z', '.tar', '.gz', '.tgz'];
+
   const filters = [filterImages, filterVideos, filterZips, filterText];
 
   selectAll.addEventListener('change', () => {
@@ -53,6 +65,16 @@ document.addEventListener('DOMContentLoaded', () => {
       selectAll.checked = filters.every((f) => f.checked);
       updateResults();
     });
+  });
+
+  toggleAdvanced.addEventListener('click', () => {
+    const isOpen = advancedContent.style.maxHeight !== '0px';
+    advancedContent.style.maxHeight = isOpen ? '0px' : '300px';
+    toggleAdvanced.classList.toggle('open', !isOpen);
+  });
+
+  [dateFrom, dateTo, authorFilter, searchFilter].forEach((el) => {
+    el.addEventListener('input', updateResults);
   });
 
   getTokenBtn.addEventListener('click', () => {
@@ -146,14 +168,13 @@ document.addEventListener('DOMContentLoaded', () => {
       );
       if (!res.ok) throw new Error('Failed');
       const allChannels = await res.json();
-      channels = allChannels.filter(
-        (c) => c.type === 0 || c.type === 5 || c.type === 1
-      );
+      channels = allChannels.filter((c) => c.type === 0 || c.type === 5 || c.type === 1);
       channelSelect.innerHTML = '';
       channels.forEach((c) => {
         const opt = document.createElement('option');
         opt.value = c.id;
-        opt.textContent = c.name;
+        const type = c.type === 5 ? '📢' : c.type === 1 ? '💬' : '#';
+        opt.textContent = `${type} ${c.name}`;
         channelSelect.appendChild(opt);
       });
     } catch (e) {
@@ -168,9 +189,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   scanBtn.addEventListener('click', startScraping);
-  stopBtn.addEventListener('click', () => {
-    abort = true;
-  });
+  stopBtn.addEventListener('click', () => { abort = true; });
 
   async function startScraping() {
     messages = [];
@@ -200,37 +219,64 @@ document.addEventListener('DOMContentLoaded', () => {
     updateResults();
     resetUI();
 
-    if (messages.length > 0) {
-      showStatus(`Scraped ${messages.length} messages`, 'success');
+    if (messages.length > 0 && !abort) {
+      showStatus(`Scraped ${messages.length} messages. Found ${mediaFiles.length} media files.`, 'success');
     }
   }
 
   async function fetchMessages(t, channelId, before) {
     if (abort) return;
-    try {
-      let url = `https://discord.com/api/v10/channels/${channelId}/messages?limit=100`;
-      if (before) url += `&before=${before}`;
+    let retries = 0;
+    const maxRetries = 5;
 
-      const res = await fetch(url, { headers: { Authorization: t } });
-      if (!res.ok) {
-        showStatus('Access denied to this channel', 'error');
-        return;
+    while (true) {
+      if (abort) return;
+      try {
+        let url = `https://discord.com/api/v10/channels/${channelId}/messages?limit=100`;
+        if (before) url += `&before=${before}`;
+
+        const res = await fetch(url, { headers: { Authorization: t } });
+
+        if (res.status === 429) {
+          const data = await res.json();
+          const retryAfter = (data.retry_after || 1) * 1000;
+          showStatus(`Rate limited. Waiting ${Math.ceil(retryAfter / 1000)}s...`, 'info');
+          await sleep(retryAfter);
+          retries++;
+          if (retries > maxRetries) {
+            showStatus('Too many rate limits. Stopping.', 'error');
+            return;
+          }
+          continue;
+        }
+
+        if (!res.ok) {
+          showStatus(`Access denied (${res.status})`, 'error');
+          return;
+        }
+
+        retries = 0;
+        const data = await res.json();
+        messages.push(...data);
+        counter.textContent = `Messages: ${messages.length}`;
+
+        const pct = Math.min(100, (messages.length / 5000) * 100);
+        progressFill.style.width = pct + '%';
+
+        if (data.length < 100) return;
+        before = data[data.length - 1].id;
+        await sleep(350);
+      } catch (e) {
+        showStatus('Network error. Retrying...', 'error');
+        await sleep(2000);
+        retries++;
+        if (retries > maxRetries) return;
       }
-
-      const data = await res.json();
-      messages.push(...data);
-      counter.textContent = `Messages: ${messages.length}`;
-
-      const pct = Math.min(100, (messages.length / 1000) * 100);
-      progressFill.style.width = pct + '%';
-
-      if (data.length === 100 && !abort) {
-        await new Promise((r) => setTimeout(r, 300));
-        await fetchMessages(t, channelId, data[data.length - 1].id);
-      }
-    } catch (e) {
-      showStatus('Error fetching messages', 'error');
     }
+  }
+
+  function sleep(ms) {
+    return new Promise((r) => setTimeout(r, ms));
   }
 
   function resetUI() {
@@ -240,43 +286,83 @@ document.addEventListener('DOMContentLoaded', () => {
     channelSelect.disabled = false;
     progressBar.style.display = 'none';
     actions.style.display = messages.length > 0 ? 'flex' : 'none';
-    results.style.display = mediaFiles.length > 0 ? 'block' : 'none';
   }
 
   function extractMedia() {
     mediaFiles = [];
-    const IMAGE_EXT = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg', '.tiff'];
-    const VIDEO_EXT = ['.mp4', '.webm', '.mov', '.avi', '.mkv', '.m4v'];
-    const ZIP_EXT = ['.zip', '.rar', '.7z', '.tar', '.gz', '.tgz'];
+    const seen = new Set();
+    const fromDate = dateFrom.value ? new Date(dateFrom.value) : null;
+    const toDate = dateTo.value ? new Date(dateTo.value + 'T23:59:59') : null;
+    const authorQ = authorFilter.value.toLowerCase().trim();
+    const searchQ = searchFilter.value.toLowerCase().trim();
 
     for (const msg of messages) {
-      if (!msg.attachments) continue;
-      for (const att of msg.attachments) {
-        const url = att.url || att.proxy_url;
-        if (!url) continue;
-        const cleanUrl = url.split('?')[0];
-        const name = att.filename || cleanUrl.split('/').pop() || 'unknown';
-        const ext = '.' + name.split('.').pop().toLowerCase();
-        const size = att.size ? formatSize(att.size) : '';
+      const msgDate = new Date(msg.timestamp);
+      if (fromDate && msgDate < fromDate) continue;
+      if (toDate && msgDate > toDate) continue;
 
-        let type = null;
-        if (IMAGE_EXT.includes(ext)) type = 'image';
-        else if (VIDEO_EXT.includes(ext)) type = 'video';
-        else if (ZIP_EXT.includes(ext)) type = 'zip';
+      const author = msg.author?.username || 'Unknown';
+      if (authorQ && !author.toLowerCase().includes(authorQ)) continue;
 
-        if (type) {
+      const content = (msg.content || '').toLowerCase();
+      if (searchQ && !content.includes(searchQ)) continue;
+
+      if (msg.attachments) {
+        for (const att of msg.attachments) {
+          const url = att.url || att.proxy_url;
+          if (!url || seen.has(url)) continue;
+          seen.add(url);
+
+          const name = att.filename || 'unknown';
+          const ext = '.' + name.split('.').pop().toLowerCase();
+          const size = att.size ? formatSize(att.size) : '';
+          const type = getTypeFromExt(ext);
+          if (type) {
+            mediaFiles.push({
+              type, name, url, size, author,
+              timestamp: msg.timestamp || '',
+              source: 'attachment',
+              date: msgDate.toISOString().split('T')[0],
+            });
+          }
+        }
+      }
+
+      if (msg.embeds) {
+        for (const embed of msg.embeds) {
+          const embedUrl = embed.url;
+          const imageUrl = embed.image?.url || embed.thumbnail?.url || embed.video?.url;
+          if (!imageUrl || seen.has(imageUrl)) continue;
+          seen.add(imageUrl);
+
+          const name = imageUrl.split('/').pop().split('?')[0] || 'embed';
+          const ext = '.' + name.split('.').pop().toLowerCase();
+          const type = getTypeFromExt(ext) || (embed.video ? 'video' : 'image');
+          const size = embed.image?.width && embed.image?.height
+            ? `${embed.image.width}x${embed.image.height}`
+            : '';
+
           mediaFiles.push({
-            type,
-            name,
-            url,
-            size,
-            author: msg.author?.username || 'Unknown',
+            type, name: `embed_${name}`, url: imageUrl, size, author,
             timestamp: msg.timestamp || '',
-            messageId: msg.id,
+            source: 'embed',
+            date: msgDate.toISOString().split('T')[0],
           });
         }
       }
     }
+  }
+
+  function getTypeFromExt(ext) {
+    if (IMAGE_EXT.includes(ext)) return 'image';
+    if (VIDEO_EXT.includes(ext)) return 'video';
+    if (ZIP_EXT.includes(ext)) return 'zip';
+
+    const urlChecks = { image: IMAGE_EXT, video: VIDEO_EXT, zip: ZIP_EXT };
+    for (const [type, exts] of Object.entries(urlChecks)) {
+      if (exts.some((e) => ext.includes(e))) return type;
+    }
+    return null;
   }
 
   function formatSize(bytes) {
@@ -293,15 +379,20 @@ document.addEventListener('DOMContentLoaded', () => {
     return items;
   }
 
-  function getSelectedText() {
-    if (!filterText.checked) return [];
-    return messages.map((m) => ({
-      type: 'text',
-      author: m.author?.username || 'Unknown',
-      content: m.content || '',
-      timestamp: m.timestamp || '',
-      url: `https://discord.com/channels/${serverSelect.value}/${m.channel_id}/${m.id}`,
-    }));
+  function getFilteredMessages() {
+    const fromDate = dateFrom.value ? new Date(dateFrom.value) : null;
+    const toDate = dateTo.value ? new Date(dateTo.value + 'T23:59:59') : null;
+    const authorQ = authorFilter.value.toLowerCase().trim();
+    const searchQ = searchFilter.value.toLowerCase().trim();
+
+    return messages.filter((m) => {
+      const d = new Date(m.timestamp);
+      if (fromDate && d < fromDate) return false;
+      if (toDate && d > toDate) return false;
+      if (authorQ && !(m.author?.username || '').toLowerCase().includes(authorQ)) return false;
+      if (searchQ && !(m.content || '').toLowerCase().includes(searchQ)) return false;
+      return true;
+    });
   }
 
   function updateStats() {
@@ -314,9 +405,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function updateResults() {
     const selected = getSelectedMedia();
-    const total = selected.length;
-    results.style.display = total > 0 ? 'block' : 'none';
-    resultsTitle.textContent = `${total} files found`;
+    results.style.display = selected.length > 0 ? 'block' : 'none';
+    resultsTitle.textContent = `${selected.length} files found`;
     resultsList.innerHTML = '';
 
     const display = selected.slice(0, 100);
@@ -331,10 +421,11 @@ document.addEventListener('DOMContentLoaded', () => {
           : item.type === 'video'
           ? '<path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>'
           : '<path d="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2z"/>';
+      const sourceTag = item.source === 'embed' ? ' <span class="tag">embed</span>' : '';
       div.innerHTML = `
         <svg class="icon" viewBox="0 0 24 24" width="16" height="16" fill="${iconColor}">${iconPath}</svg>
-        <span class="name" title="${item.name}">${item.name}</span>
-        <span class="size">${item.size}</span>
+        <span class="name" title="${item.url}">${item.name}</span>
+        <span class="size">${item.size}</span>${sourceTag}
       `;
       resultsList.appendChild(div);
     });
@@ -349,41 +440,72 @@ document.addEventListener('DOMContentLoaded', () => {
 
   downloadBtn.addEventListener('click', () => {
     const selected = getSelectedMedia();
-    if (selected.length === 0) {
-      showStatus('No media files selected', 'error');
-      return;
-    }
+    if (selected.length === 0) { showStatus('No media files selected', 'error'); return; }
     chrome.runtime.sendMessage({ action: 'downloadFiles', files: selected });
-    showStatus(`Downloading ${selected.length} files...`, 'success');
+    showStatus(`Downloading ${selected.length} files to Downloads/discord-scraper/`, 'success');
   });
 
   exportBtn.addEventListener('click', () => {
     const selected = getSelectedMedia();
-    if (selected.length === 0) {
-      showStatus('No media files selected', 'error');
-      return;
-    }
+    if (selected.length === 0) { showStatus('No media files selected', 'error'); return; }
     const urls = selected.map((f) => f.url).join('\n');
     copyToClipboard(urls);
     showStatus(`Copied ${selected.length} URLs to clipboard`, 'success');
   });
 
-  exportTextBtn.addEventListener('click', () => {
-    const textData = getSelectedText();
-    if (textData.length === 0) {
-      showStatus('No text selected', 'error');
-      return;
-    }
-    const json = JSON.stringify(textData, null, 2);
-    const blob = new Blob([json], { type: 'application/json' });
+  exportJsonBtn.addEventListener('click', () => {
+    const filtered = getFilteredMessages();
+    if (filtered.length === 0) { showStatus('No messages to export', 'error'); return; }
+    const data = filtered.map((m) => ({
+      author: m.author?.username || 'Unknown',
+      content: m.content || '',
+      timestamp: m.timestamp,
+      attachments: (m.attachments || []).map((a) => a.url),
+      embeds: (m.embeds || []).map((e) => e.url || e.image?.url).filter(Boolean),
+    }));
+    downloadFile(JSON.stringify(data, null, 2), 'application/json', 'json');
+    showStatus(`Exported ${filtered.length} messages as JSON`, 'success');
+  });
+
+  exportCsvBtn.addEventListener('click', () => {
+    const filtered = getFilteredMessages();
+    if (filtered.length === 0) { showStatus('No messages to export', 'error'); return; }
+    const escape = (s) => `"${(s || '').replace(/"/g, '""')}"`;
+    const header = 'Author,Content,Timestamp,Attachments,Embeds';
+    const rows = filtered.map((m) =>
+      [
+        escape(m.author?.username),
+        escape(m.content),
+        escape(m.timestamp),
+        escape((m.attachments || []).map((a) => a.url).join(' | ')),
+        escape((m.embeds || []).map((e) => e.url || e.image?.url).filter(Boolean).join(' | ')),
+      ].join(',')
+    );
+    downloadFile([header, ...rows].join('\n'), 'text/csv', 'csv');
+    showStatus(`Exported ${filtered.length} messages as CSV`, 'success');
+  });
+
+  exportTxtBtn.addEventListener('click', () => {
+    const filtered = getFilteredMessages();
+    if (filtered.length === 0) { showStatus('No messages to export', 'error'); return; }
+    const text = filtered.map((m) =>
+      `[${m.timestamp}] ${m.author?.username}: ${m.content}`
+    ).join('\n');
+    downloadFile(text, 'text/plain', 'txt');
+    showStatus(`Exported ${filtered.length} messages as TXT`, 'success');
+  });
+
+  function downloadFile(content, mimeType, ext) {
+    const blob = new Blob([content], { type: mimeType });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${serverSelect.options[serverSelect.selectedIndex]?.text || 'server'}_${channelSelect.options[channelSelect.selectedIndex]?.text || 'channel'}.json`;
+    const server = serverSelect.options[serverSelect.selectedIndex]?.text || 'server';
+    const channel = channelSelect.options[channelSelect.selectedIndex]?.text || 'channel';
+    a.download = `${server}_${channel}.${ext}`;
     a.click();
     URL.revokeObjectURL(url);
-    showStatus(`Exported ${textData.length} messages`, 'success');
-  });
+  }
 
   clearResults.addEventListener('click', () => {
     results.style.display = 'none';
@@ -405,8 +527,6 @@ document.addEventListener('DOMContentLoaded', () => {
     status.textContent = message;
     status.className = `status visible ${type}`;
     clearTimeout(status._timeout);
-    status._timeout = setTimeout(() => {
-      status.classList.remove('visible');
-    }, 5000);
+    status._timeout = setTimeout(() => status.classList.remove('visible'), 5000);
   }
 });
