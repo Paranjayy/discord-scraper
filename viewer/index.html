@@ -39,15 +39,102 @@
     let sortBy = 'newest';
     let selectedImage = null;
 
+    function parseTXT(text) {
+      const messages = [];
+      const lines = text.split('\n');
+      let currentChannel = '';
+
+      for (const line of lines) {
+        if (line.startsWith('# Channel:')) {
+          currentChannel = line.replace('# Channel:', '').trim().replace(/^#/, '').trim();
+          continue;
+        }
+        if (line.startsWith('#') || line.trim() === '') continue;
+
+        const match = line.match(/^\[(.+?)\]\s+(.+?):\s+(.*?)(?:\s+\[attachment:\s+(.+?)\])?$/);
+        if (match) {
+          const [, timestamp, author, content, attachment] = match;
+          messages.push({
+            author: author || 'Unknown',
+            content: content || '',
+            timestamp: timestamp || new Date().toISOString(),
+            attachments: attachment ? [attachment] : [],
+            embeds: [],
+            channel: currentChannel || undefined,
+          });
+        }
+      }
+      return messages;
+    }
+
+    function parseCSV(text) {
+      const lines = text.split('\n').filter(l => l.trim());
+      if (lines.length < 2) return [];
+
+      const messages = [];
+      for (let i = 1; i < lines.length; i++) {
+        const cols = lines[i].match(/(".*?"|[^,]+)/g) || [];
+        const unquote = (s) => s.replace(/^"|"$/g, '').replace(/""/g, '"');
+
+        messages.push({
+          author: unquote(cols[1] || 'Unknown'),
+          content: unquote(cols[2] || ''),
+          timestamp: unquote(cols[3] || new Date().toISOString()),
+          attachments: unquote(cols[4] || '').split('; ').filter(Boolean),
+          embeds: unquote(cols[5] || '').split('; ').filter(Boolean),
+          channel: unquote(cols[0] || '') || undefined,
+        });
+      }
+      return messages;
+    }
+
+    function parseJSON(text) {
+      try {
+        const data = JSON.parse(text);
+        if (Array.isArray(data)) return data;
+        return [];
+      } catch {
+        return [];
+      }
+    }
+
+    function detectAndParse(text, filename) {
+      const ext = filename.split('.').pop()?.toLowerCase();
+
+      if (ext === 'txt') return parseTXT(text);
+      if (ext === 'csv') return parseCSV(text);
+      if (ext === 'json') return parseJSON(text);
+
+      // Try JSON first, then TXT, then CSV
+      try {
+        const data = JSON.parse(text);
+        if (Array.isArray(data)) return data;
+      } catch {}
+
+      if (text.includes('# Channel:') || text.match(/^\[.+?\]\s+.+?:/m)) {
+        return parseTXT(text);
+      }
+
+      if (text.includes(',') && text.includes('\n')) {
+        return parseCSV(text);
+      }
+
+      return [];
+    }
+
     function handleFile(file) {
       if (!file) return;
       fileName = file.name;
       const reader = new FileReader();
       reader.onload = (e) => {
-        try {
-          messages = JSON.parse(e.target.result);
+        const text = e.target.result;
+        const parsed = detectAndParse(text, file.name);
+        if (parsed.length > 0) {
+          messages = parsed;
           render();
-        } catch { alert('Invalid JSON file'); }
+        } else {
+          alert('Could not parse file. Supported formats: JSON, TXT, CSV');
+        }
       };
       reader.readAsText(file);
     }
@@ -149,10 +236,10 @@
               </div>
               <h1 class="text-3xl font-bold mb-3 gradient-text">Discord Scraper Viewer</h1>
               <p class="text-[#71717a] mb-2">View your scraped Discord data with images, videos, and messages.</p>
-              <p class="text-[#52525b] text-sm mb-8">Drop a JSON file or click to upload</p>
-              <input type="file" id="fileInput" accept=".json" class="hidden">
+              <p class="text-[#52525b] text-sm mb-8">Drop a file or click to upload (JSON, TXT, CSV)</p>
+              <input type="file" id="fileInput" accept=".json,.txt,.csv" class="hidden">
               <button id="uploadBtn" class="px-8 py-4 text-white rounded-2xl font-semibold hover:opacity-90 transition-all hover:scale-105 active:scale-95 shadow-lg" style="background: linear-gradient(135deg, #5865f2, #eb459e); box-shadow: 0 10px 40px rgba(88,101,242,0.25);">
-                Upload JSON File
+                Upload File
               </button>
             </div>
           </div>

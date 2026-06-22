@@ -19,6 +19,89 @@ interface Stats {
   dateRange: { first: string; last: string } | null;
 }
 
+function parseTXT(text: string): Message[] {
+  const messages: Message[] = [];
+  const lines = text.split('\n');
+  let currentChannel = '';
+
+  for (const line of lines) {
+    if (line.startsWith('# Channel:')) {
+      currentChannel = line.replace('# Channel:', '').trim().replace(/^#/, '').trim();
+      continue;
+    }
+    if (line.startsWith('#') || line.trim() === '') continue;
+
+    const match = line.match(/^\[(.+?)\]\s+(.+?):\s+(.*?)(?:\s+\[attachment:\s+(.+?)\])?$/);
+    if (match) {
+      const [, timestamp, author, content, attachment] = match;
+      messages.push({
+        author: author || 'Unknown',
+        content: content || '',
+        timestamp: timestamp || new Date().toISOString(),
+        attachments: attachment ? [attachment] : [],
+        embeds: [],
+        channel: currentChannel || undefined,
+      });
+    }
+  }
+  return messages;
+}
+
+function parseCSV(text: string): Message[] {
+  const lines = text.split('\n').filter(l => l.trim());
+  if (lines.length < 2) return [];
+
+  const messages: Message[] = [];
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].match(/(".*?"|[^,]+)/g) || [];
+    const unquote = (s: string) => s.replace(/^"|"$/g, '').replace(/""/g, '"');
+
+    messages.push({
+      author: unquote(cols[1] || 'Unknown'),
+      content: unquote(cols[2] || ''),
+      timestamp: unquote(cols[3] || new Date().toISOString()),
+      attachments: unquote(cols[4] || '').split('; ').filter(Boolean),
+      embeds: unquote(cols[5] || '').split('; ').filter(Boolean),
+      channel: unquote(cols[0] || '') || undefined,
+    });
+  }
+  return messages;
+}
+
+function parseJSON(text: string): Message[] {
+  try {
+    const data = JSON.parse(text);
+    if (Array.isArray(data)) return data;
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+function detectAndParse(text: string, filename: string): Message[] {
+  const ext = filename.split('.').pop()?.toLowerCase();
+
+  if (ext === 'txt') return parseTXT(text);
+  if (ext === 'csv') return parseCSV(text);
+  if (ext === 'json') return parseJSON(text);
+
+  // Try JSON first, then TXT, then CSV
+  try {
+    const data = JSON.parse(text);
+    if (Array.isArray(data)) return data;
+  } catch {}
+
+  if (text.includes('# Channel:') || text.match(/^\[.+?\]\s+.+?:/m)) {
+    return parseTXT(text);
+  }
+
+  if (text.includes(',') && text.includes('\n')) {
+    return parseCSV(text);
+  }
+
+  return [];
+}
+
 export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [fileName, setFileName] = useState('');
@@ -36,11 +119,12 @@ export default function Home() {
     setFileName(file.name);
     const reader = new FileReader();
     reader.onload = (ev) => {
-      try {
-        const data = JSON.parse(ev.target?.result as string);
-        setMessages(data);
-      } catch {
-        alert('Invalid JSON file');
+      const text = ev.target?.result as string;
+      const parsed = detectAndParse(text, file.name);
+      if (parsed.length > 0) {
+        setMessages(parsed);
+      } else {
+        alert('Could not parse file. Supported formats: JSON, TXT, CSV');
       }
     };
     reader.readAsText(file);
@@ -49,15 +133,16 @@ export default function Home() {
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     const file = e.dataTransfer.files[0];
-    if (!file || !file.name.endsWith('.json')) return;
+    if (!file) return;
     setFileName(file.name);
     const reader = new FileReader();
     reader.onload = (ev) => {
-      try {
-        const data = JSON.parse(ev.target?.result as string);
-        setMessages(data);
-      } catch {
-        alert('Invalid JSON file');
+      const text = ev.target?.result as string;
+      const parsed = detectAndParse(text, file.name);
+      if (parsed.length > 0) {
+        setMessages(parsed);
+      } else {
+        alert('Could not parse file. Supported formats: JSON, TXT, CSV');
       }
     };
     reader.readAsText(file);
@@ -143,14 +228,14 @@ export default function Home() {
               View your scraped Discord data with images, videos, and messages.
             </p>
             <p className="text-[#52525b] text-sm mb-8">
-              Drop a JSON file or click to upload
+              Drop a file or click to upload (JSON, TXT, CSV)
             </p>
-            <input ref={fileRef} type="file" accept=".json" onChange={handleFile} className="hidden" />
+            <input ref={fileRef} type="file" accept=".json,.txt,.csv" onChange={handleFile} className="hidden" />
             <button
               onClick={() => fileRef.current?.click()}
               className="px-8 py-4 bg-gradient-to-r from-[#5865f2] to-[#eb459e] text-white rounded-2xl font-semibold hover:opacity-90 transition-all hover:scale-105 active:scale-95 shadow-lg shadow-[#5865f2]/25"
             >
-              Upload JSON File
+              Upload File
             </button>
           </div>
         </div>
