@@ -533,4 +533,25 @@ document.addEventListener('DOMContentLoaded', () => {
     clearTimeout(status._t);
     status._t = setTimeout(() => status.classList.remove('visible'), 5000);
   }
+
+  // Open viewer with data
+  window.openViewer = function() {
+    const items = getSelectedMedia();
+    const msgs = Object.values(allMessages).flat().map(m => ({
+      author: m.author?.username || 'Unknown',
+      content: m.content || '',
+      timestamp: m.timestamp,
+      attachments: (m.attachments || []).map(a => a.url),
+      embeds: (m.embeds || []).map(e => e.url || ''),
+      channel: m._channel || ''
+    }));
+    const json = JSON.stringify(msgs, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    chrome.tabs.create({ url: chrome.runtime.getURL('viewer/index.html') }, (tab) => {
+      setTimeout(() => {
+        chrome.tabs.sendMessage(tab.id, { type: 'load-data', data: json });
+      }, 1000);
+    });
+  };
 });

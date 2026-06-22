@@ -503,6 +503,28 @@ h1 {
   background: #4752c4;
 }
 
+.btn-viewer {
+  width: 100%;
+  padding: 12px 20px;
+  background: linear-gradient(135deg, #5865f2, #eb459e);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.2s;
+  margin-top: 8px;
+}
+.btn-viewer:hover {
+  opacity: 0.9;
+  transform: scale(1.02);
+}
+
 .btn-export-text {
   background: #4e5058;
   color: #dbdee1;

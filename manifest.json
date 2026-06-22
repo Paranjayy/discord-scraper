@@ -25,5 +25,11 @@
   "background": {
     "service_worker": "background.js",
     "scripts": ["jszip.min.js", "background.js"]
-  }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["viewer/index.html"],
+      "matches": ["*://discord.com/*"]
+    }
+  ]
 }
