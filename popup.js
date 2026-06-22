@@ -29,6 +29,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const resultsTitle = $('resultsTitle');
   const clearResults = $('clearResults');
   const downloadBtn = $('downloadBtn');
+  const estimateBtn = $('estimateBtn');
   const exportBtn = $('exportBtn');
   const exportJsonBtn = $('exportJsonBtn');
   const exportCsvBtn = $('exportCsvBtn');
@@ -408,6 +409,38 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  // Estimate storage
+  async function estimateStorage() {
+    const selected = getSelectedMedia();
+    if (!selected.length) return;
+
+    downloadProgress.style.display = 'block';
+    downloadText.textContent = 'Estimating file sizes...';
+    downloadFill.style.width = '0%';
+
+    let totalBytes = 0;
+    const HEADERS = { method: 'HEAD', mode: 'no-cors' };
+
+    for (let i = 0; i < selected.length; i++) {
+      try {
+        const resp = await fetch(selected[i].url, HEADERS);
+        const len = resp.headers.get('content-length');
+        if (len) totalBytes += parseInt(len, 10);
+      } catch {}
+      downloadFill.style.width = `${((i + 1) / selected.length * 100).toFixed(0)}%`;
+    }
+
+    const mb = (totalBytes / 1024 / 1024).toFixed(1);
+    const fileCount = selected.length;
+    downloadText.textContent = `${fileCount} files · ~${mb} MB estimated`;
+    downloadFill.style.width = '100%';
+
+    setTimeout(() => {
+      downloadProgress.style.display = 'none';
+    }, 3000);
+  }
+
+  estimateBtn.addEventListener('click', estimateStorage);
   downloadBtn.addEventListener('click', downloadAsZip);
   exportBtn.addEventListener('click', () => {
     const selected = getSelectedMedia();

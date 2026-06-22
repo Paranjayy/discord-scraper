@@ -525,6 +525,16 @@ h1 {
   transform: scale(1.02);
 }
 
+.btn-estimate {
+  background: rgba(35, 165, 90, 0.15);
+  color: #23a55a;
+  border: 1px solid rgba(35, 165, 90, 0.3);
+}
+.btn-estimate:hover {
+  background: rgba(35, 165, 90, 0.25);
+  border-color: rgba(35, 165, 90, 0.5);
+}
+
 .btn-export-text {
   background: #4e5058;
   color: #dbdee1;
