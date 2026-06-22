@@ -78,14 +78,63 @@ function parseJSON(text: string): Message[] {
   }
 }
 
+function parseHTML(text: string): Message[] {
+  const messages: Message[] = [];
+  const doc = new DOMParser().parseFromString(text, 'text/html');
+  const rows = doc.querySelectorAll('table tr');
+  let headers: string[] = [];
+
+  rows.forEach((row, i) => {
+    const cells = row.querySelectorAll('td, th');
+    if (i === 0) {
+      headers = Array.from(cells).map(c => c.textContent?.trim().toLowerCase() || '');
+      return;
+    }
+    const get = (name: string) => {
+      const idx = headers.indexOf(name);
+      return idx >= 0 ? cells[idx]?.textContent?.trim() || '' : '';
+    };
+    if (headers.length > 0) {
+      messages.push({
+        author: get('author') || get('username') || get('name') || 'Unknown',
+        content: get('content') || get('message') || get('text') || '',
+        timestamp: get('timestamp') || get('date') || get('time') || new Date().toISOString(),
+        attachments: (get('attachments') || '').split(';').filter(Boolean),
+        embeds: (get('embeds') || '').split(';').filter(Boolean),
+        channel: get('channel') || undefined,
+      });
+    }
+  });
+
+  if (messages.length === 0) {
+    const blocks = text.split(/\n\s*\n/);
+    for (const block of blocks) {
+      const lines = block.split('\n');
+      const title = lines[0]?.trim();
+      if (title && title.startsWith('<')) continue;
+      if (lines.length > 1) {
+        messages.push({
+          author: 'Unknown',
+          content: lines.map(l => l.trim()).filter(Boolean).join('\n'),
+          timestamp: new Date().toISOString(),
+          attachments: [],
+          embeds: [],
+        });
+      }
+    }
+  }
+
+  return messages;
+}
+
 function detectAndParse(text: string, filename: string): Message[] {
   const ext = filename.split('.').pop()?.toLowerCase();
 
+  if (ext === 'html' || ext === 'htm') return parseHTML(text);
   if (ext === 'txt') return parseTXT(text);
   if (ext === 'csv') return parseCSV(text);
   if (ext === 'json') return parseJSON(text);
 
-  // Try JSON first, then TXT, then CSV
   try {
     const data = JSON.parse(text);
     if (Array.isArray(data)) return data;
@@ -124,7 +173,7 @@ export default function Home() {
       if (parsed.length > 0) {
         setMessages(parsed);
       } else {
-        alert('Could not parse file. Supported formats: JSON, TXT, CSV');
+        alert('Could not parse file. Supported: JSON, TXT, CSV, HTML');
       }
     };
     reader.readAsText(file);
@@ -142,46 +191,11 @@ export default function Home() {
       if (parsed.length > 0) {
         setMessages(parsed);
       } else {
-        alert('Could not parse file. Supported formats: JSON, TXT, CSV');
+        alert('Could not parse file. Supported: JSON, TXT, CSV, HTML');
       }
     };
     reader.readAsText(file);
   }, []);
-
-  const stats: Stats = useMemo(() => {
-    if (!messages.length) return { totalMessages: 0, totalImages: 0, totalVideos: 0, totalAuthors: 0, dateRange: null };
-    const authors = new Set(messages.map((m) => m.author));
-    let images = 0, videos = 0;
-    messages.forEach((m) => {
-      [...m.attachments, ...m.embeds].forEach((url) => {
-        const clean = url.split('?')[0].toLowerCase();
-        if (/\.(jpg|jpeg|png|gif|webp|svg|bmp)$/.test(clean)) images++;
-        if (/\.(mp4|webm|mov|avi|mkv)$/.test(clean)) videos++;
-      });
-    });
-    const dates = messages.map((m) => new Date(m.timestamp)).sort((a, b) => a.getTime() - b.getTime());
-    return {
-      totalMessages: messages.length,
-      totalImages: images,
-      totalVideos: videos,
-      totalAuthors: authors.size,
-      dateRange: dates.length ? { first: dates[0].toLocaleDateString(), last: dates[dates.length - 1].toLocaleDateString() } : null,
-    };
-  }, [messages]);
-
-  const otherFiles = useMemo(() => {
-    const files: { url: string; name: string; author: string; timestamp: string; channel?: string }[] = [];
-    filtered.forEach((m) => {
-      [...m.attachments, ...m.embeds].forEach((url) => {
-        const clean = url.split('?')[0].toLowerCase();
-        if (!/\.(jpg|jpeg|png|gif|webp|svg|bmp|mp4|webm|mov|avi|mkv)$/.test(clean)) {
-          const name = clean.split('/').pop()?.split('?')[0] || 'file';
-          files.push({ url, name, author: m.author, timestamp: m.timestamp, channel: m.channel });
-        }
-      });
-    });
-    return files;
-  }, [filtered]);
 
   const filtered = useMemo(() => {
     return messages
@@ -201,6 +215,27 @@ export default function Home() {
   const authors = useMemo(() => Array.from(new Set(messages.map((m) => m.author))).sort(), [messages]);
   const channelNames = useMemo(() => Array.from(new Set(messages.map((m) => m.channel).filter(Boolean))).sort(), [messages]);
 
+  const stats: Stats = useMemo(() => {
+    if (!messages.length) return { totalMessages: 0, totalImages: 0, totalVideos: 0, totalAuthors: 0, dateRange: null };
+    const authorsSet = new Set(messages.map((m) => m.author));
+    let images = 0, videos = 0;
+    messages.forEach((m) => {
+      [...m.attachments, ...m.embeds].forEach((url) => {
+        const clean = url.split('?')[0].toLowerCase();
+        if (/\.(jpg|jpeg|png|gif|webp|svg|bmp)$/.test(clean)) images++;
+        if (/\.(mp4|webm|mov|avi|mkv)$/.test(clean)) videos++;
+      });
+    });
+    const dates = messages.map((m) => new Date(m.timestamp)).sort((a, b) => a.getTime() - b.getTime());
+    return {
+      totalMessages: messages.length,
+      totalImages: images,
+      totalVideos: videos,
+      totalAuthors: authorsSet.size,
+      dateRange: dates.length ? { first: dates[0].toLocaleDateString(), last: dates[dates.length - 1].toLocaleDateString() } : null,
+    };
+  }, [messages]);
+
   const allImages = useMemo(() => {
     const imgs: { url: string; author: string; timestamp: string; channel?: string }[] = [];
     filtered.forEach((m) => {
@@ -219,12 +254,26 @@ export default function Home() {
     filtered.forEach((m) => {
       [...m.attachments, ...m.embeds].forEach((url) => {
         const clean = url.split('?')[0].toLowerCase();
-        if (/\.(mp4|webm|mov|avi)$/.test(clean)) {
+        if (/\.(mp4|webm|mov|avi|mkv)$/.test(clean)) {
           vids.push({ url, author: m.author, timestamp: m.timestamp, channel: m.channel });
         }
       });
     });
     return vids;
+  }, [filtered]);
+
+  const otherFiles = useMemo(() => {
+    const files: { url: string; name: string; author: string; timestamp: string; channel?: string }[] = [];
+    filtered.forEach((m) => {
+      [...m.attachments, ...m.embeds].forEach((url) => {
+        const clean = url.split('?')[0].toLowerCase();
+        if (!/\.(jpg|jpeg|png|gif|webp|svg|bmp|mp4|webm|mov|avi|mkv)$/.test(clean)) {
+          const name = clean.split('/').pop()?.split('?')[0] || 'file';
+          files.push({ url, name, author: m.author, timestamp: m.timestamp, channel: m.channel });
+        }
+      });
+    });
+    return files;
   }, [filtered]);
 
   return (
@@ -242,9 +291,9 @@ export default function Home() {
               View your scraped Discord data with images, videos, and messages.
             </p>
             <p className="text-[#52525b] text-sm mb-8">
-              Drop a file or click to upload (JSON, TXT, CSV)
+              Drop a file or click to upload (JSON, TXT, CSV, HTML)
             </p>
-            <input ref={fileRef} type="file" accept=".json,.txt,.csv" onChange={handleFile} className="hidden" />
+            <input ref={fileRef} type="file" accept=".json,.txt,.csv,.html,.htm" onChange={handleFile} className="hidden" />
             <button
               onClick={() => fileRef.current?.click()}
               className="px-8 py-4 bg-gradient-to-r from-[#5865f2] to-[#eb459e] text-white rounded-2xl font-semibold hover:opacity-90 transition-all hover:scale-105 active:scale-95 shadow-lg shadow-[#5865f2]/25"
@@ -255,11 +304,10 @@ export default function Home() {
         </div>
       ) : (
         <div className="flex h-screen">
-          {/* Sidebar */}
           <div className="w-72 bg-[#111118] flex-shrink-0 p-5 flex flex-col border-r border-white/5">
             <div className="mb-6">
               <h2 className="text-xl font-bold text-white mb-1 truncate">
-                {fileName.replace('.json', '')}
+                {fileName.replace(/\.(json|txt|csv|html|htm)$/, '')}
               </h2>
               <p className="text-xs text-[#71717a]">
                 {stats.totalMessages.toLocaleString()} messages
@@ -267,7 +315,6 @@ export default function Home() {
               </p>
             </div>
 
-            {/* Stats Cards */}
             <div className="grid grid-cols-2 gap-2 mb-6">
               {[
                 { label: 'Messages', value: stats.totalMessages, color: 'text-white' },
@@ -282,15 +329,14 @@ export default function Home() {
               ))}
             </div>
             {otherFiles.length > 0 && (
-              <div className="grid grid-cols-2 gap-2 mb-6">
+              <div className="mb-4">
                 <div className="p-3 rounded-xl bg-white/[0.03] border border-white/5">
                   <div className="text-lg font-bold text-[#23a55a]">{otherFiles.length.toLocaleString()}</div>
-                  <div className="text-[10px] text-[#52525b] uppercase tracking-wider">Files</div>
+                  <div className="text-[10px] text-[#52525b] uppercase tracking-wider">Other Files</div>
                 </div>
               </div>
             )}
 
-            {/* Search */}
             <div className="mb-4">
               <input
                 type="text"
@@ -301,7 +347,6 @@ export default function Home() {
               />
             </div>
 
-            {/* Filters */}
             <div className="space-y-3 mb-4">
               <select
                 value={authorFilter}
@@ -333,7 +378,6 @@ export default function Home() {
               </select>
             </div>
 
-            {/* View Tabs */}
             <div className="flex gap-1 p-1 bg-[#0a0a0f] rounded-xl mb-6 border border-white/5">
               {(['chat', 'media', 'grid'] as const).map((v) => (
                 <button
@@ -360,7 +404,6 @@ export default function Home() {
             </button>
           </div>
 
-          {/* Main Content */}
           <div className="flex-1 overflow-y-auto">
             {view === 'chat' && (
               <div className="max-w-3xl mx-auto p-6 space-y-1">
@@ -511,7 +554,6 @@ export default function Home() {
             )}
           </div>
 
-          {/* Lightbox */}
           {selectedImage && (
             <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-8" onClick={() => setSelectedImage(null)}>
               <button className="absolute top-4 right-4 text-white/50 hover:text-white text-4xl">&times;</button>

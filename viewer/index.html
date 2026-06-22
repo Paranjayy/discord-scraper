@@ -99,14 +99,63 @@
       }
     }
 
+    function parseHTML(text) {
+      const messages = [];
+      const doc = new DOMParser().parseFromString(text, 'text/html');
+      const rows = doc.querySelectorAll('table tr');
+      let headers = [];
+
+      rows.forEach((row, i) => {
+        const cells = row.querySelectorAll('td, th');
+        if (i === 0) {
+          headers = Array.from(cells).map(c => c.textContent?.trim().toLowerCase() || '');
+          return;
+        }
+        const get = (name) => {
+          const idx = headers.indexOf(name);
+          return idx >= 0 ? cells[idx]?.textContent?.trim() || '' : '';
+        };
+        if (headers.length > 0) {
+          messages.push({
+            author: get('author') || get('username') || get('name') || 'Unknown',
+            content: get('content') || get('message') || get('text') || '',
+            timestamp: get('timestamp') || get('date') || get('time') || new Date().toISOString(),
+            attachments: (get('attachments') || '').split(';').filter(Boolean),
+            embeds: (get('embeds') || '').split(';').filter(Boolean),
+            channel: get('channel') || undefined,
+          });
+        }
+      });
+
+      if (messages.length === 0) {
+        const blocks = text.split(/\n\s*\n/);
+        for (const block of blocks) {
+          const lines = block.split('\n');
+          const title = lines[0]?.trim();
+          if (title && title.startsWith('<')) continue;
+          if (lines.length > 1) {
+            messages.push({
+              author: 'Unknown',
+              content: lines.map(l => l.trim()).filter(Boolean).join('\n'),
+              timestamp: new Date().toISOString(),
+              attachments: [],
+              embeds: [],
+            });
+          }
+        }
+      }
+
+      return messages;
+    }
+
     function detectAndParse(text, filename) {
       const ext = filename.split('.').pop()?.toLowerCase();
 
+      if (ext === 'html' || ext === 'htm') return parseHTML(text);
       if (ext === 'txt') return parseTXT(text);
       if (ext === 'csv') return parseCSV(text);
       if (ext === 'json') return parseJSON(text);
 
-      // Try JSON first, then TXT, then CSV
       try {
         const data = JSON.parse(text);
         if (Array.isArray(data)) return data;
@@ -134,7 +183,7 @@
           messages = parsed;
           render();
         } else {
-          alert('Could not parse file. Supported formats: JSON, TXT, CSV');
+          alert('Could not parse file. Supported: JSON, TXT, CSV, HTML');
         }
       };
       reader.readAsText(file);
@@ -241,8 +290,8 @@
               </div>
               <h1 class="text-3xl font-bold mb-3 gradient-text">Discord Scraper Viewer</h1>
               <p class="text-[#71717a] mb-2">View your scraped Discord data with images, videos, and messages.</p>
-              <p class="text-[#52525b] text-sm mb-8">Drop a file or click to upload (JSON, TXT, CSV)</p>
-              <input type="file" id="fileInput" accept=".json,.txt,.csv" class="hidden">
+              <p class="text-[#52525b] text-sm mb-8">Drop a file or click to upload (JSON, TXT, CSV, HTML)</p>
+              <input type="file" id="fileInput" accept=".json,.txt,.csv,.html,.htm" class="hidden">
               <button id="uploadBtn" class="px-8 py-4 text-white rounded-2xl font-semibold hover:opacity-90 transition-all hover:scale-105 active:scale-95 shadow-lg" style="background: linear-gradient(135deg, #5865f2, #eb459e); box-shadow: 0 10px 40px rgba(88,101,242,0.25);">
                 Upload File
               </button>
@@ -378,7 +427,7 @@
         <div class="flex h-screen">
           <div class="w-72 bg-[#111118] flex-shrink-0 p-5 flex flex-col border-r border-white/5">
             <div class="mb-6">
-              <h2 class="text-xl font-bold text-white mb-1 truncate">${fileName.replace('.json', '')}</h2>
+              <h2 class="text-xl font-bold text-white mb-1 truncate">${fileName.replace(/\.(json|txt|csv|html|htm)$/, '')}</h2>
               <p class="text-xs text-[#71717a]">${stats.total.toLocaleString()} messages${stats.dateRange ? ` · ${stats.dateRange.first} — ${stats.dateRange.last}` : ''}</p>
             </div>
             <div class="grid grid-cols-2 gap-2 mb-6">
