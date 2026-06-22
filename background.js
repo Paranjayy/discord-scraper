@@ -62,6 +62,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
+  if (request.action === 'downloadFiles') {
+    const { files, serverName } = request;
+    handleDownloadFiles(files, serverName, sender.id).then(sendResponse);
+    return true;
+  }
+
   return true;
 });
 
@@ -96,10 +102,10 @@ async function handleFetchAndZip(files, serverName, token, tabId) {
         headers: token ? { Authorization: token } : {}
       });
       if (!res.ok) { failed++; done++; continue; }
-      const blob = await res.blob();
+      const arrayBuffer = await res.arrayBuffer();
       const folderPath = `${serverName}/${file.channel}/${file.type}s`;
       const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-      zip.file(`${folderPath}/${safeName}`, blob);
+      zip.file(`${folderPath}/${safeName}`, new Uint8Array(arrayBuffer));
     } catch (e) {
       console.warn(`Failed to fetch: ${file.name}`, e);
       failed++;
@@ -118,21 +124,75 @@ async function handleFetchAndZip(files, serverName, token, tabId) {
     }
   }
 
-  const content = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
-  const url = URL.createObjectURL(content);
+  const content = await zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE' });
+
+  let binary = '';
+  const chunkSize = 8192;
+  for (let i = 0; i < content.length; i += chunkSize) {
+    const chunk = content.subarray(i, i + chunkSize);
+    binary += String.fromCharCode.apply(null, chunk);
+  }
+  const base64 = btoa(binary);
+  const dataUrl = `data:application/zip;base64,${base64}`;
+  const filename = `discord-scraper/${serverName}.zip`;
 
   return new Promise((resolve) => {
     chrome.downloads.download({
-      url: url,
-      filename: `discord-scraper/${serverName}.zip`,
+      url: dataUrl,
+      filename: filename,
       conflictAction: 'uniquify',
       saveAs: false,
     }, (downloadId) => {
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
       if (chrome.runtime.lastError) {
         console.error('Download failed:', chrome.runtime.lastError.message);
       }
       resolve({ success: true, downloadId, failed });
     });
   });
+}
+
+async function handleDownloadFiles(files, serverName, tabId) {
+  const total = files.length;
+  let done = 0;
+  let failed = 0;
+
+  for (const file of files) {
+    try {
+      const folderPath = `${serverName}/${file.channel}/${file.type}s`;
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const filename = `${folderPath}/${safeName}`;
+
+      await new Promise((resolve, reject) => {
+        chrome.downloads.download({
+          url: file.url,
+          filename: filename,
+          conflictAction: 'uniquify',
+          saveAs: false,
+        }, (downloadId) => {
+          if (chrome.runtime.lastError) {
+            reject(chrome.runtime.lastError);
+          } else {
+            resolve(downloadId);
+          }
+        });
+      });
+    } catch (e) {
+      console.warn(`Failed to download: ${file.name}`, e);
+      failed++;
+    }
+    done++;
+
+    if (tabId) {
+      try {
+        chrome.tabs.sendMessage(tabId, {
+          type: 'zip-progress',
+          done,
+          total,
+          failed
+        });
+      } catch {}
+    }
+  }
+
+  return { success: true, failed };
 }
