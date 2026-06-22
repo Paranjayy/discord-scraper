@@ -41,15 +41,21 @@ document.addEventListener('DOMContentLoaded', () => {
   const dateTo = $('dateTo');
   const authorFilter = $('authorFilter');
   const searchFilter = $('searchFilter');
+  const selectAllTypes = $('selectAllTypes');
+
   const filterImages = $('filterImages');
   const filterVideos = $('filterVideos');
   const filterZips = $('filterZips');
+  const filterPdfs = $('filterPdfs');
+  const filterAudio = $('filterAudio');
+  const filterCode = $('filterCode');
+  const filterDocs = $('filterDocs');
   const filterText = $('filterText');
-  const selectAllCb = $('selectAll');
+
   const imageCount = $('imageCount');
   const videoCount = $('videoCount');
   const zipCount = $('zipCount');
-  const textCount = $('textCount');
+  const otherCount = $('otherCount');
 
   let token = null;
   let channels = [];
@@ -57,17 +63,25 @@ document.addEventListener('DOMContentLoaded', () => {
   let allMedia = {};
   let abort = false;
 
-  const IMAGE_EXT = ['.jpg','.jpeg','.png','.gif','.webp','.bmp','.svg','.tiff','.tif'];
-  const VIDEO_EXT = ['.mp4','.webm','.mov','.avi','.mkv','.m4v'];
-  const ZIP_EXT = ['.zip','.rar','.7z','.tar','.gz','.tgz'];
-  const allTypeFilters = [filterImages, filterVideos, filterZips, filterText];
+  const IMAGE_EXT = ['.jpg','.jpeg','.png','.gif','.webp','.bmp','.svg','.tiff','.tif','.ico'];
+  const VIDEO_EXT = ['.mp4','.webm','.mov','.avi','.mkv','.m4v','.flv','.wmv'];
+  const ZIP_EXT = ['.zip','.rar','.7z','.tar','.gz','.tgz','.bz2'];
+  const PDF_EXT = ['.pdf'];
+  const AUDIO_EXT = ['.mp3','.wav','.ogg','.flac','.aac','.m4a','.wma'];
+  const CODE_EXT = ['.js','.ts','.jsx','.tsx','.py','.java','.c','.cpp','.h','.cs','.rb','.go','.rs','.php','.html','.css','.scss','.less','.json','.xml','.yaml','.yml','.toml','.sql','.sh','.bash','.zsh','.swift','.kt'];
+  const DOC_EXT = ['.doc','.docx','.xls','.xlsx','.ppt','.pptx','.csv','.rtf','.odt','.ods','.odp'];
 
-  selectAllCb.addEventListener('change', () => {
-    allTypeFilters.forEach((f) => (f.checked = selectAllCb.checked));
+  const allTypeFilters = [filterImages, filterVideos, filterZips, filterPdfs, filterAudio, filterCode, filterDocs, filterText];
+
+  selectAllTypes.addEventListener('click', () => {
+    const allChecked = allTypeFilters.every(f => f.checked);
+    allTypeFilters.forEach(f => f.checked = !allChecked);
+    selectAllTypes.textContent = allChecked ? 'Select All' : 'Deselect All';
     updateResults();
   });
-  allTypeFilters.forEach((f) => f.addEventListener('change', () => {
-    selectAllCb.checked = allTypeFilters.every((f) => f.checked);
+
+  allTypeFilters.forEach(f => f.addEventListener('change', () => {
+    selectAllTypes.textContent = allTypeFilters.every(f => f.checked) ? 'Deselect All' : 'Select All';
     updateResults();
   }));
 
@@ -77,7 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
     toggleAdvanced.classList.toggle('open', !open);
   });
 
-  [dateFrom, dateTo, authorFilter, searchFilter].forEach((el) => el.addEventListener('input', updateResults));
+  [dateFrom, dateTo, authorFilter, searchFilter].forEach(el => el.addEventListener('input', updateResults));
 
   getTokenBtn.addEventListener('click', () => {
     chrome.runtime.sendMessage({ action: 'getToken' });
@@ -126,7 +140,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!res.ok) throw new Error();
       const guilds = await res.json();
       serverSelect.innerHTML = '';
-      guilds.forEach((g) => {
+      guilds.forEach(g => {
         const opt = document.createElement('option');
         opt.value = g.id; opt.textContent = g.name;
         serverSelect.appendChild(opt);
@@ -135,10 +149,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch { showStatus('Failed to load servers', 'error'); }
   }
 
-  serverSelect.addEventListener('change', () => {
-    resetState();
-    loadChannels(token);
-  });
+  serverSelect.addEventListener('change', () => { resetState(); loadChannels(token); });
 
   async function loadChannels(t) {
     const serverId = serverSelect.value;
@@ -147,14 +158,14 @@ document.addEventListener('DOMContentLoaded', () => {
       const res = await fetch(`https://discord.com/api/v10/guilds/${serverId}/channels`, { headers: { Authorization: t } });
       if (!res.ok) throw new Error();
       const all = await res.json();
-      channels = all.filter((c) => c.type === 0 || c.type === 5);
+      channels = all.filter(c => c.type === 0 || c.type === 5);
       renderChannelList();
     } catch { showStatus('Failed to load channels', 'error'); }
   }
 
   function renderChannelList() {
     channelList.innerHTML = '';
-    channels.forEach((c) => {
+    channels.forEach(c => {
       const label = document.createElement('label');
       label.className = 'channel-item';
       const icon = c.type === 5 ? '📢' : '#';
@@ -166,9 +177,7 @@ document.addEventListener('DOMContentLoaded', () => {
       channelList.appendChild(label);
     });
     updateChannelCount();
-    channelList.querySelectorAll('.channel-checkbox').forEach((cb) => {
-      cb.addEventListener('change', updateChannelCount);
-    });
+    channelList.querySelectorAll('.channel-checkbox').forEach(cb => cb.addEventListener('change', updateChannelCount));
   }
 
   function updateChannelCount() {
@@ -177,25 +186,25 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   selectAllChannels.addEventListener('click', () => {
-    channelList.querySelectorAll('.channel-checkbox').forEach((cb) => (cb.checked = true));
+    channelList.querySelectorAll('.channel-checkbox').forEach(cb => cb.checked = true);
     updateChannelCount();
   });
 
   selectNoChannels.addEventListener('click', () => {
-    channelList.querySelectorAll('.channel-checkbox').forEach((cb) => (cb.checked = false));
+    channelList.querySelectorAll('.channel-checkbox').forEach(cb => cb.checked = false);
     updateChannelCount();
   });
 
   function getSelectedChannels() {
-    return Array.from(channelList.querySelectorAll('.channel-checkbox:checked')).map((cb) => ({
-      id: cb.value,
-      name: cb.dataset.name,
+    return Array.from(channelList.querySelectorAll('.channel-checkbox:checked')).map(cb => ({
+      id: cb.value, name: cb.dataset.name,
     }));
   }
 
   function resetState() {
     allMessages = {}; allMedia = {};
     counter.textContent = ''; actions.style.display = 'none'; results.style.display = 'none';
+    stats.style.display = 'none';
   }
 
   scanBtn.addEventListener('click', startScraping);
@@ -213,8 +222,6 @@ document.addEventListener('DOMContentLoaded', () => {
     progressBar.style.display = 'block'; progressFill.style.width = '0%';
     channelProgress.style.display = 'block';
     downloadProgress.style.display = 'none';
-
-    const serverName = serverSelect.options[serverSelect.selectedIndex]?.text || 'server';
 
     for (let i = 0; i < selected.length; i++) {
       if (abort) break;
@@ -236,7 +243,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const totalMsgs = Object.values(allMessages).flat().length;
     const totalMedia = Object.values(allMedia).flat().length;
     if (totalMsgs > 0 && !abort) {
-      showStatus(`Done! ${totalMsgs} messages, ${totalMedia} media files from ${selected.length} channels.`, 'success');
+      showStatus(`Done! ${totalMsgs} messages, ${totalMedia} files from ${selected.length} channels.`, 'success');
     }
   }
 
@@ -278,7 +285,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
   function extractAllMedia() {
     allMedia = {};
@@ -334,6 +341,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (IMAGE_EXT.includes(ext)) return 'image';
     if (VIDEO_EXT.includes(ext)) return 'video';
     if (ZIP_EXT.includes(ext)) return 'zip';
+    if (PDF_EXT.includes(ext)) return 'pdf';
+    if (AUDIO_EXT.includes(ext)) return 'audio';
+    if (CODE_EXT.includes(ext)) return 'code';
+    if (DOC_EXT.includes(ext)) return 'doc';
     return null;
   }
 
@@ -350,6 +361,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (filterImages.checked && f.type === 'image') items.push(f);
         if (filterVideos.checked && f.type === 'video') items.push(f);
         if (filterZips.checked && f.type === 'zip') items.push(f);
+        if (filterPdfs.checked && f.type === 'pdf') items.push(f);
+        if (filterAudio.checked && f.type === 'audio') items.push(f);
+        if (filterCode.checked && f.type === 'code') items.push(f);
+        if (filterDocs.checked && f.type === 'doc') items.push(f);
       }
     }
     return items;
@@ -376,11 +391,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function updateStats() {
     const all = Object.values(allMedia).flat();
-    imageCount.textContent = all.filter((f) => f.type === 'image').length;
-    videoCount.textContent = all.filter((f) => f.type === 'video').length;
-    zipCount.textContent = all.filter((f) => f.type === 'zip').length;
-    textCount.textContent = Object.values(allMessages).flat().length;
-    stats.style.display = 'flex';
+    imageCount.textContent = all.filter(f => f.type === 'image').length;
+    videoCount.textContent = all.filter(f => f.type === 'video').length;
+    zipCount.textContent = all.filter(f => ['zip','pdf','audio','code','doc'].includes(f.type)).length;
+    otherCount.textContent = Object.values(allMessages).flat().length;
+    stats.style.display = 'grid';
   }
 
   function updateResults() {
@@ -388,17 +403,28 @@ document.addEventListener('DOMContentLoaded', () => {
     results.style.display = selected.length > 0 ? 'block' : 'none';
     resultsTitle.textContent = `${selected.length} files found`;
     resultsList.innerHTML = '';
-    selected.slice(0, 100).forEach((item) => {
+
+    const typeColors = {
+      image: '#5865f2', video: '#ed4245', zip: '#fee75c', pdf: '#ed4245',
+      audio: '#23a55a', code: '#5865f2', doc: '#00a8fc'
+    };
+    const typeIcons = {
+      image: '<path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>',
+      video: '<path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>',
+      zip: '<path d="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2z"/>',
+      pdf: '<path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 7V3.5L18.5 9H13z"/>',
+      audio: '<path d="M12 3v9.28c-.47-.17-.97-.28-1.5-.28C8.01 12 6 14.01 6 16.5S8.01 21 10.5 21c2.31 0 4.2-1.75 4.45-4H15V6h4V3h-7z"/>',
+      code: '<path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/>',
+      doc: '<path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 7V3.5L18.5 9H13zM8 15h8v2H8v-2zm0-4h8v2H8v-2z"/>',
+    };
+
+    selected.slice(0, 100).forEach(item => {
       const div = document.createElement('div');
       div.className = 'result-item';
-      const color = item.type === 'image' ? '#5865f2' : item.type === 'video' ? '#ed4245' : '#fee75c';
-      const path = item.type === 'image'
-        ? '<path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>'
-        : item.type === 'video'
-        ? '<path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>'
-        : '<path d="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2z"/>';
+      const color = typeColors[item.type] || '#949ba4';
+      const icon = typeIcons[item.type] || typeIcons.doc;
       const ch = item.channel ? `<span class="tag">#${item.channel}</span>` : '';
-      div.innerHTML = `<svg class="icon" viewBox="0 0 24 24" width="16" height="16" fill="${color}">${path}</svg><span class="name" title="${item.url}">${item.name}</span><span class="size">${item.size}</span>${ch}`;
+      div.innerHTML = `<svg class="icon" viewBox="0 0 24 24" width="14" height="14" fill="${color}">${icon}</svg><span class="name" title="${item.url}">${item.name}</span><span class="size">${item.size}</span>${ch}`;
       resultsList.appendChild(div);
     });
     if (selected.length > 100) {
@@ -411,7 +437,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function estimateStorage() {
     const selected = getSelectedMedia();
-    if (!selected.length) return;
+    if (!selected.length) { showStatus('No files to estimate', 'error'); return; }
 
     downloadProgress.style.display = 'block';
     downloadText.textContent = 'Estimating file sizes...';
@@ -430,11 +456,12 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   estimateBtn.addEventListener('click', estimateStorage);
-  downloadBtn.addEventListener('click', downloadAsZip);
+  downloadBtn.addEventListener('click', downloadAll);
+
   exportBtn.addEventListener('click', () => {
     const selected = getSelectedMedia();
     if (!selected.length) { showStatus('No media files selected', 'error'); return; }
-    copyToClipboard(selected.map((f) => f.url).join('\n'));
+    copyToClipboard(selected.map(f => f.url).join('\n'));
     showStatus(`Copied ${selected.length} URLs to clipboard`, 'success');
   });
   exportJsonBtn.addEventListener('click', () => exportMessages('json'));
@@ -442,9 +469,11 @@ document.addEventListener('DOMContentLoaded', () => {
   exportTxtBtn.addEventListener('click', () => exportMessages('txt'));
   clearResults.addEventListener('click', () => { results.style.display = 'none'; resultsList.innerHTML = ''; });
 
-  async function downloadAsZip() {
+  async function downloadAll() {
     const selected = getSelectedMedia();
-    if (!selected.length) { showStatus('No media files selected', 'error'); return; }
+    const includeText = filterText.checked;
+    const totalFiles = selected.length + (includeText ? Object.keys(allMessages).length : 0);
+    if (!totalFiles) { showStatus('No files to download', 'error'); return; }
 
     downloadProgress.style.display = 'block';
     downloadBtn.disabled = true;
@@ -458,6 +487,37 @@ document.addEventListener('DOMContentLoaded', () => {
       type: f.type,
       channel: f.channel || 'unknown'
     }));
+
+    if (includeText) {
+      for (const [channelName, messages] of Object.entries(allMessages)) {
+        const filtered = messages.filter(m => {
+          if (authorFilter.value) {
+            const a = (m.author?.username || '').toLowerCase();
+            if (!a.includes(authorFilter.value.toLowerCase())) return false;
+          }
+          if (searchFilter.value && !(m.content || '').toLowerCase().includes(searchFilter.value.toLowerCase())) return false;
+          return true;
+        });
+
+        const text = filtered.map(m => {
+          const time = new Date(m.timestamp).toLocaleString();
+          const author = m.author?.username || 'Unknown';
+          const content = m.content || '';
+          const atts = (m.attachments || []).map(a => ` [attachment: ${a.filename}]`).join('');
+          return `[${time}] ${author}: ${content}${atts}`;
+        }).join('\n');
+
+        const header = `# Channel: #${channelName}\n# Server: ${serverName}\n# Messages: ${filtered.length}\n# Exported: ${new Date().toLocaleString()}\n\n`;
+        const blob = new Blob([header + text], { type: 'text/plain' });
+        const base64 = await blobToBase64(blob);
+        files.push({
+          url: `data:text/plain;base64,${base64}`,
+          name: 'messages.txt',
+          type: 'text',
+          channel: channelName
+        });
+      }
+    }
 
     chrome.runtime.onMessage.addListener(function progressListener(msg) {
       if (msg.type === 'download-progress') {
@@ -479,38 +539,48 @@ document.addEventListener('DOMContentLoaded', () => {
     downloadFill.style.width = '0%';
     if (result && result.success) {
       const failedMsg = result.failed > 0 ? ` (${result.failed} failed)` : '';
-      showStatus(`Downloaded ${selected.length} files to discord-scraper/${serverName}/${failedMsg}`, 'success');
+      showStatus(`Downloaded ${files.length} files to discord-scraper/${serverName}/${failedMsg}`, 'success');
     } else {
       showStatus('Download failed', 'error');
     }
   }
 
+  function blobToBase64(blob) {
+    return new Promise(resolve => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64 = reader.result.split(',')[1];
+        resolve(base64);
+      };
+      reader.readAsDataURL(blob);
+    });
+  }
+
   function exportMessages(format) {
     const filtered = getFilteredMessages();
     if (!filtered.length) { showStatus('No messages to export', 'error'); return; }
-    const serverName = serverSelect.options[serverSelect.selectedIndex]?.text || 'server';
 
     let content, ext;
     if (format === 'json') {
-      content = JSON.stringify(filtered.map((m) => ({
+      content = JSON.stringify(filtered.map(m => ({
         channel: m.channel, author: m.author?.username || 'Unknown',
         content: m.content || '', timestamp: m.timestamp,
-        attachments: (m.attachments || []).map((a) => a.url),
-        embeds: (m.embeds || []).map((e) => e.url || e.image?.url).filter(Boolean),
+        attachments: (m.attachments || []).map(a => a.url),
+        embeds: (m.embeds || []).map(e => e.url || e.image?.url).filter(Boolean),
       })), null, 2);
       ext = 'json';
     } else if (format === 'csv') {
-      const esc = (s) => `"${(s || '').replace(/"/g, '""')}"`;
+      const esc = s => `"${(s || '').replace(/"/g, '""')}"`;
       const header = 'Channel,Author,Content,Timestamp,Attachments,Embeds';
-      const rows = filtered.map((m) => [
+      const rows = filtered.map(m => [
         esc(m.channel), esc(m.author?.username), esc(m.content), esc(m.timestamp),
-        esc((m.attachments || []).map((a) => a.url).join(' | ')),
-        esc((m.embeds || []).map((e) => e.url || e.image?.url).filter(Boolean).join(' | ')),
+        esc((m.attachments || []).map(a => a.url).join(' | ')),
+        esc((m.embeds || []).map(e => e.url || e.image?.url).filter(Boolean).join(' | ')),
       ].join(','));
       content = [header, ...rows].join('\n');
       ext = 'csv';
     } else {
-      content = filtered.map((m) => `[${m.channel}] [${m.timestamp}] ${m.author?.username}: ${m.content}`).join('\n');
+      content = filtered.map(m => `[${m.channel}] [${m.timestamp}] ${m.author?.username}: ${m.content}`).join('\n');
       ext = 'txt';
     }
 
