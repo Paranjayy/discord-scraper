@@ -495,17 +495,23 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     downloadText.textContent = 'Building ZIP file...';
-    const content = await zip.generateAsync({ type: 'base64', compression: 'DEFLATE' }, (meta) => {
+    const content = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' }, (meta) => {
       downloadFill.style.width = meta.percent + '%';
     });
 
     const filename = `${serverName}.zip`;
-    chrome.runtime.sendMessage({ action: 'downloadZip', base64Data: content, filename }, () => {
-      downloadProgress.style.display = 'none';
-      downloadBtn.disabled = false;
-      downloadFill.style.width = '0%';
-      showStatus(`Downloaded ${total} files as ${filename}`, 'success');
-    });
+    const url = URL.createObjectURL(content);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+
+    downloadProgress.style.display = 'none';
+    downloadBtn.disabled = false;
+    downloadFill.style.width = '0%';
+    showStatus(`Downloaded ${total} files as ${filename}`, 'success');
   }
 
   function exportMessages(format) {
