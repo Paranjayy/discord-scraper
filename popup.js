@@ -460,7 +460,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }));
 
     chrome.runtime.onMessage.addListener(function progressListener(msg) {
-      if (msg.type === 'zip-progress') {
+      if (msg.type === 'download-progress') {
         const pct = Math.round((msg.done / msg.total) * 100);
         downloadFill.style.width = pct + '%';
         downloadText.textContent = `Downloading ${msg.done}/${msg.total} files (${pct}%)${msg.failed ? ` · ${msg.failed} failed` : ''}...`;
@@ -471,14 +471,15 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     const result = await new Promise(resolve => {
-      chrome.runtime.sendMessage({ action: 'fetchAndZip', files, serverName, token }, resolve);
+      chrome.runtime.sendMessage({ action: 'downloadFiles', files, serverName }, resolve);
     });
 
     downloadProgress.style.display = 'none';
     downloadBtn.disabled = false;
     downloadFill.style.width = '0%';
     if (result && result.success) {
-      showStatus(`Downloaded ${selected.length} files as ${serverName}.zip`, 'success');
+      const failedMsg = result.failed > 0 ? ` (${result.failed} failed)` : '';
+      showStatus(`Downloaded ${selected.length} files to discord-scraper/${serverName}/${failedMsg}`, 'success');
     } else {
       showStatus('Download failed', 'error');
     }
