@@ -165,4 +165,32 @@ Random ideas that could be interesting to build.
 
 ---
 
+## Related Projects & Ecosystem
+
+Existing tools in the chat/media scraping space worth knowing about:
+
+### Instagram
+- **Insist** — Chrome extension for Instagram scraping. Similar concept to what we're building but for IG. Good UI reference.
+
+### Messaging Apps
+- **WhatsApp** — Has built-in chat export (Settings → Chats → Export Chat). Exports as .txt with media.
+- **Telegram** — Desktop app has export feature (Settings → Advanced → Export Telegram Data). Very comprehensive, exports HTML/JSON with all media.
+- **iMessage** — Can export via macOS: ` ~/Library/Messages/chat.db` (SQLite database)
+
+### Facebook
+- **Facebook Data Download** — Settings → Your Facebook Information → Download Your Information. Can select date range, format (JSON/HTML), and include messages/media.
+- **FBScraper** — Various GitHub projects for scraping Facebook groups/pages.
+
+### Discord (others)
+- **DiscordChatExporter** — Open source CLI tool by Tyrrrz. Exports Discord channels to HTML/JSON/CSV. Very mature project.
+- **Discord.js** — Node.js library for Discord API. Used by many bots and tools.
+- **AnswerOverflow** — Makes Discord threads Google-indexable via bot. Requires server admin access.
+
+### Other Platforms
+- **Slack** — Has export API for workspace owners (Slack Enterprise Grid or Grid+ plans)
+- **Matrix** — Open protocol, self-hostable. Has bridges to Discord/Slack/etc.
+- **Matrix Room Downloader** — Scrapes Matrix rooms with all media
+
+---
+
 *Last updated: 2026-06-22*
