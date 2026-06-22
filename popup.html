@@ -35,9 +35,16 @@
         <select id="serverSelect"></select>
       </div>
 
-      <div class="select-group">
-        <label>Channel</label>
-        <select id="channelSelect"></select>
+      <div class="channel-select-group">
+        <div class="channel-header">
+          <label>Channels</label>
+          <div class="channel-actions">
+            <button class="btn-link-sm" id="selectAllChannels">All</button>
+            <button class="btn-link-sm" id="selectNoChannels">None</button>
+            <span class="channel-count" id="channelCount">0 selected</span>
+          </div>
+        </div>
+        <div class="channel-list" id="channelList"></div>
       </div>
 
       <div class="collapsible">
@@ -136,6 +143,10 @@
         <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M6 6h12v12H6z"/></svg>
         Stop
       </button>
+
+      <div class="channel-progress" id="channelProgress" style="display:none">
+        <div class="channel-progress-text" id="channelProgressText"></div>
+      </div>
 
       <div class="counter" id="counter"></div>
 
