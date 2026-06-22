@@ -564,7 +564,7 @@ document.addEventListener('DOMContentLoaded', () => {
     downloadFill.style.width = '0%';
     if (result && result.success) {
       const failedMsg = result.failed > 0 ? ` (${result.failed} failed)` : '';
-      showStatus(`Downloaded ${files.length} files to discord-scraper/${serverName}/${failedMsg}`, 'success');
+      showStatus(`Downloaded ${files.length} files to Downloads/${serverName}_*${failedMsg}`, 'success');
     } else {
       showStatus('Download failed', 'error');
     }

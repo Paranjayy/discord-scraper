@@ -156,7 +156,7 @@ export default function Home() {
       [...m.attachments, ...m.embeds].forEach((url) => {
         const clean = url.split('?')[0].toLowerCase();
         if (/\.(jpg|jpeg|png|gif|webp|svg|bmp)$/.test(clean)) images++;
-        if (/\.(mp4|webm|mov|avi)$/.test(clean)) videos++;
+        if (/\.(mp4|webm|mov|avi|mkv)$/.test(clean)) videos++;
       });
     });
     const dates = messages.map((m) => new Date(m.timestamp)).sort((a, b) => a.getTime() - b.getTime());
@@ -168,6 +168,20 @@ export default function Home() {
       dateRange: dates.length ? { first: dates[0].toLocaleDateString(), last: dates[dates.length - 1].toLocaleDateString() } : null,
     };
   }, [messages]);
+
+  const otherFiles = useMemo(() => {
+    const files: { url: string; name: string; author: string; timestamp: string; channel?: string }[] = [];
+    filtered.forEach((m) => {
+      [...m.attachments, ...m.embeds].forEach((url) => {
+        const clean = url.split('?')[0].toLowerCase();
+        if (!/\.(jpg|jpeg|png|gif|webp|svg|bmp|mp4|webm|mov|avi|mkv)$/.test(clean)) {
+          const name = clean.split('/').pop()?.split('?')[0] || 'file';
+          files.push({ url, name, author: m.author, timestamp: m.timestamp, channel: m.channel });
+        }
+      });
+    });
+    return files;
+  }, [filtered]);
 
   const filtered = useMemo(() => {
     return messages
@@ -267,6 +281,14 @@ export default function Home() {
                 </div>
               ))}
             </div>
+            {otherFiles.length > 0 && (
+              <div className="grid grid-cols-2 gap-2 mb-6">
+                <div className="p-3 rounded-xl bg-white/[0.03] border border-white/5">
+                  <div className="text-lg font-bold text-[#23a55a]">{otherFiles.length.toLocaleString()}</div>
+                  <div className="text-[10px] text-[#52525b] uppercase tracking-wider">Files</div>
+                </div>
+              </div>
+            )}
 
             {/* Search */}
             <div className="mb-4">
@@ -412,7 +434,7 @@ export default function Home() {
                   </div>
                 )}
                 {allVideos.length > 0 && (
-                  <div>
+                  <div className="mb-10">
                     <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-[#ed4245]"></span>
                       Videos ({allVideos.length})
@@ -429,7 +451,37 @@ export default function Home() {
                     </div>
                   </div>
                 )}
-                {allImages.length === 0 && allVideos.length === 0 && (
+                {otherFiles.length > 0 && (
+                  <div>
+                    <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-[#23a55a]"></span>
+                      Files ({otherFiles.length})
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {otherFiles.map((f, i) => {
+                        const ext = f.name.split('.').pop()?.toLowerCase() || '';
+                        const isPdf = ext === 'pdf';
+                        const isArchive = ['zip','rar','7z','tar','gz','tgz'].includes(ext);
+                        const isAudio = ['mp3','wav','ogg','flac','aac','m4a'].includes(ext);
+                        const color = isPdf ? '#ed4245' : isArchive ? '#fee75c' : isAudio ? '#23a55a' : '#5865f2';
+                        const icon = isPdf ? '📄' : isArchive ? '📦' : isAudio ? '🎵' : '📎';
+                        return (
+                          <a key={i} href={f.url} target="_blank" rel="noopener noreferrer"
+                            className="flex items-center gap-3 p-3 bg-[#111118] rounded-xl border border-white/5 hover:border-[color]/50 transition-all">
+                            <div className="w-10 h-10 rounded-lg flex items-center justify-center text-lg" style={{ background: `${color}20`, color }}>
+                              {icon}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm text-white truncate">{f.name}</p>
+                              <p className="text-[10px] text-[#52525b]">{f.author} · {new Date(f.timestamp).toLocaleDateString()}</p>
+                            </div>
+                          </a>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+                {allImages.length === 0 && allVideos.length === 0 && otherFiles.length === 0 && (
                   <div className="text-center text-[#52525b] py-32">No media in filtered messages</div>
                 )}
               </div>
