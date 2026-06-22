@@ -409,7 +409,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // Estimate storage
   async function estimateStorage() {
     const selected = getSelectedMedia();
     if (!selected.length) return;
@@ -418,26 +417,16 @@ document.addEventListener('DOMContentLoaded', () => {
     downloadText.textContent = 'Estimating file sizes...';
     downloadFill.style.width = '0%';
 
-    let totalBytes = 0;
-    const HEADERS = { method: 'HEAD', mode: 'no-cors' };
+    const urls = selected.map(f => f.url);
+    const result = await new Promise(resolve => {
+      chrome.runtime.sendMessage({ action: 'estimateFiles', urls }, resolve);
+    });
 
-    for (let i = 0; i < selected.length; i++) {
-      try {
-        const resp = await fetch(selected[i].url, HEADERS);
-        const len = resp.headers.get('content-length');
-        if (len) totalBytes += parseInt(len, 10);
-      } catch {}
-      downloadFill.style.width = `${((i + 1) / selected.length * 100).toFixed(0)}%`;
-    }
-
-    const mb = (totalBytes / 1024 / 1024).toFixed(1);
-    const fileCount = selected.length;
-    downloadText.textContent = `${fileCount} files · ~${mb} MB estimated`;
+    const mb = (result.totalBytes / 1024 / 1024).toFixed(1);
+    downloadText.textContent = `${selected.length} files · ~${mb} MB estimated`;
     downloadFill.style.width = '100%';
 
-    setTimeout(() => {
-      downloadProgress.style.display = 'none';
-    }, 3000);
+    setTimeout(() => { downloadProgress.style.display = 'none'; }, 3000);
   }
 
   estimateBtn.addEventListener('click', estimateStorage);
@@ -459,59 +448,40 @@ document.addEventListener('DOMContentLoaded', () => {
 
     downloadProgress.style.display = 'block';
     downloadBtn.disabled = true;
-    const zip = new JSZip();
+    downloadText.textContent = 'Starting download...';
+    downloadFill.style.width = '0%';
+
     const serverName = serverSelect.options[serverSelect.selectedIndex]?.text || 'server';
+    const files = selected.map(f => ({
+      url: f.url,
+      name: f.name,
+      type: f.type,
+      channel: f.channel || 'unknown'
+    }));
 
-    let done = 0;
-    const total = selected.length;
-
-    const fetchAndAdd = async (file, folder) => {
-      try {
-        const res = await fetch(file.url);
-        if (!res.ok) return;
-        const blob = await res.blob();
-        folder.file(file.name.replace(/[^a-zA-Z0-9._-]/g, '_'), blob);
-      } catch (e) { console.warn(`Failed: ${file.name}`, e); }
-      done++;
-      const pct = Math.round((done / total) * 100);
-      downloadFill.style.width = pct + '%';
-      downloadText.textContent = `Downloading ${done}/${total} files (${pct}%)...`;
-    };
-
-    const channelsInZip = {};
-    for (const file of selected) {
-      const ch = file.channel || 'unknown';
-      if (!channelsInZip[ch]) {
-        channelsInZip[ch] = {
-          images: zip.folder(`${serverName}/${ch}/images`),
-          videos: zip.folder(`${serverName}/${ch}/videos`),
-          zips: zip.folder(`${serverName}/${ch}/zips`),
-        };
+    chrome.runtime.onMessage.addListener(function progressListener(msg) {
+      if (msg.type === 'zip-progress') {
+        const pct = Math.round((msg.done / msg.total) * 100);
+        downloadFill.style.width = pct + '%';
+        downloadText.textContent = `Downloading ${msg.done}/${msg.total} files (${pct}%)${msg.failed ? ` · ${msg.failed} failed` : ''}...`;
+        if (msg.done >= msg.total) {
+          chrome.runtime.onMessage.removeListener(progressListener);
+        }
       }
-      const folder = file.type === 'image' ? channelsInZip[ch].images
-        : file.type === 'video' ? channelsInZip[ch].videos
-        : channelsInZip[ch].zips;
-      await fetchAndAdd(file, folder);
-    }
-
-    downloadText.textContent = 'Building ZIP file...';
-    const content = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' }, (meta) => {
-      downloadFill.style.width = meta.percent + '%';
     });
 
-    const filename = `${serverName}.zip`;
-    const url = URL.createObjectURL(content);
-    const a = document.createElement('a');
-    a.href = url; a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    const result = await new Promise(resolve => {
+      chrome.runtime.sendMessage({ action: 'fetchAndZip', files, serverName, token }, resolve);
+    });
 
     downloadProgress.style.display = 'none';
     downloadBtn.disabled = false;
     downloadFill.style.width = '0%';
-    showStatus(`Downloaded ${total} files as ${filename}`, 'success');
+    if (result && result.success) {
+      showStatus(`Downloaded ${selected.length} files as ${serverName}.zip`, 'success');
+    } else {
+      showStatus('Download failed', 'error');
+    }
   }
 
   function exportMessages(format) {
@@ -519,7 +489,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!filtered.length) { showStatus('No messages to export', 'error'); return; }
     const serverName = serverSelect.options[serverSelect.selectedIndex]?.text || 'server';
 
-    let content, mime, ext;
+    let content, ext;
     if (format === 'json') {
       content = JSON.stringify(filtered.map((m) => ({
         channel: m.channel, author: m.author?.username || 'Unknown',
@@ -527,7 +497,7 @@ document.addEventListener('DOMContentLoaded', () => {
         attachments: (m.attachments || []).map((a) => a.url),
         embeds: (m.embeds || []).map((e) => e.url || e.image?.url).filter(Boolean),
       })), null, 2);
-      mime = 'application/json'; ext = 'json';
+      ext = 'json';
     } else if (format === 'csv') {
       const esc = (s) => `"${(s || '').replace(/"/g, '""')}"`;
       const header = 'Channel,Author,Content,Timestamp,Attachments,Embeds';
@@ -537,18 +507,18 @@ document.addEventListener('DOMContentLoaded', () => {
         esc((m.embeds || []).map((e) => e.url || e.image?.url).filter(Boolean).join(' | ')),
       ].join(','));
       content = [header, ...rows].join('\n');
-      mime = 'text/csv'; ext = 'csv';
+      ext = 'csv';
     } else {
       content = filtered.map((m) => `[${m.channel}] [${m.timestamp}] ${m.author?.username}: ${m.content}`).join('\n');
-      mime = 'text/plain'; ext = 'txt';
+      ext = 'txt';
     }
 
-    const blob = new Blob([content], { type: mime });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `${serverName}.${ext}`;
-    a.click(); URL.revokeObjectURL(url);
-    showStatus(`Exported ${filtered.length} messages as ${ext.toUpperCase()}`, 'success');
+    navigator.clipboard.writeText(content).then(() => {
+      showStatus(`Copied ${filtered.length} messages (${ext.toUpperCase()}) to clipboard`, 'success');
+    }).catch(() => {
+      copyToClipboard(content);
+      showStatus(`Copied ${filtered.length} messages (${ext.toUpperCase()}) to clipboard`, 'success');
+    });
   }
 
   function resetUI() {
@@ -573,9 +543,10 @@ document.addEventListener('DOMContentLoaded', () => {
     status._t = setTimeout(() => status.classList.remove('visible'), 5000);
   }
 
-  // Open viewer with data
-  window.openViewer = function() {
-    const items = getSelectedMedia();
+  const viewerBtn = $('viewerBtn');
+  viewerBtn.addEventListener('click', openViewer);
+
+  function openViewer() {
     const msgs = Object.values(allMessages).flat().map(m => ({
       author: m.author?.username || 'Unknown',
       content: m.content || '',
@@ -584,13 +555,9 @@ document.addEventListener('DOMContentLoaded', () => {
       embeds: (m.embeds || []).map(e => e.url || ''),
       channel: m._channel || ''
     }));
-    const json = JSON.stringify(msgs, null, 2);
-    const blob = new Blob([json], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    chrome.tabs.create({ url: chrome.runtime.getURL('viewer/index.html') }, (tab) => {
-      setTimeout(() => {
-        chrome.tabs.sendMessage(tab.id, { type: 'load-data', data: json });
-      }, 1000);
+    const json = JSON.stringify(msgs);
+    chrome.storage.local.set({ viewerData: json }, () => {
+      chrome.tabs.create({ url: chrome.runtime.getURL('viewer/index.html') });
     });
-  };
+  }
 });

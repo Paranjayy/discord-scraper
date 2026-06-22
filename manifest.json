@@ -9,7 +9,7 @@
     "tabs",
     "downloads"
   ],
-  "host_permissions": ["*://discord.com/*"],
+  "host_permissions": ["*://discord.com/*", "*://cdn.discordapp.com/*"],
   "action": {
     "default_icon": {
       "16": "icons/icon16.png",
@@ -28,7 +28,7 @@
   "web_accessible_resources": [
     {
       "resources": ["viewer/index.html"],
-      "matches": ["*://discord.com/*"]
+      "matches": ["<all_urls>"]
     }
   ]
 }

@@ -1,3 +1,5 @@
+importScripts('jszip.min.js');
+
 const origins = chrome.runtime.getManifest().host_permissions;
 
 chrome.action.onClicked.addListener(async () => {
@@ -48,19 +50,81 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     sendResponse({ status: 'listener added' });
   }
 
-  if (request.action === 'downloadZip') {
-    const { base64Data, filename } = request;
-    const binary = atob(base64Data);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) {
-      bytes[i] = binary.charCodeAt(i);
-    }
-    const blob = new Blob([bytes], { type: 'application/zip' });
-    const url = URL.createObjectURL(blob);
+  if (request.action === 'estimateFiles') {
+    const { urls } = request;
+    handleEstimate(urls).then(sendResponse);
+    return true;
+  }
 
+  if (request.action === 'fetchAndZip') {
+    const { files, serverName, token } = request;
+    handleFetchAndZip(files, serverName, token, sender.id).then(sendResponse);
+    return true;
+  }
+
+  return true;
+});
+
+async function handleEstimate(urls) {
+  let totalBytes = 0;
+  const sizes = [];
+
+  for (const url of urls) {
+    try {
+      const res = await fetch(url, { method: 'HEAD' });
+      const len = res.headers.get('content-length');
+      const size = len ? parseInt(len, 10) : 0;
+      totalBytes += size;
+      sizes.push(size);
+    } catch {
+      sizes.push(0);
+    }
+  }
+
+  return { totalBytes, sizes };
+}
+
+async function handleFetchAndZip(files, serverName, token, tabId) {
+  const zip = new JSZip();
+  const total = files.length;
+  let done = 0;
+  let failed = 0;
+
+  for (const file of files) {
+    try {
+      const res = await fetch(file.url, {
+        headers: token ? { Authorization: token } : {}
+      });
+      if (!res.ok) { failed++; done++; continue; }
+      const blob = await res.blob();
+      const folderPath = `${serverName}/${file.channel}/${file.type}s`;
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      zip.file(`${folderPath}/${safeName}`, blob);
+    } catch (e) {
+      console.warn(`Failed to fetch: ${file.name}`, e);
+      failed++;
+    }
+    done++;
+
+    if (tabId) {
+      try {
+        chrome.tabs.sendMessage(tabId, {
+          type: 'zip-progress',
+          done,
+          total,
+          failed
+        });
+      } catch {}
+    }
+  }
+
+  const content = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+  const url = URL.createObjectURL(content);
+
+  return new Promise((resolve) => {
     chrome.downloads.download({
       url: url,
-      filename: `discord-scraper/${filename}`,
+      filename: `discord-scraper/${serverName}.zip`,
       conflictAction: 'uniquify',
       saveAs: false,
     }, (downloadId) => {
@@ -68,11 +132,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       if (chrome.runtime.lastError) {
         console.error('Download failed:', chrome.runtime.lastError.message);
       }
-      sendResponse({ success: true, downloadId });
+      resolve({ success: true, downloadId, failed });
     });
-
-    return true;
-  }
-
-  return true;
-});
+  });
+}

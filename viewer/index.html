@@ -30,7 +30,6 @@
   <div id="app"></div>
 
   <script>
-    // State
     let messages = [];
     let fileName = '';
     let searchQuery = '';
@@ -40,7 +39,6 @@
     let sortBy = 'newest';
     let selectedImage = null;
 
-    // Parse
     function handleFile(file) {
       if (!file) return;
       fileName = file.name;
@@ -54,7 +52,6 @@
       reader.readAsText(file);
     }
 
-    // Stats
     function getStats() {
       if (!messages.length) return { total: 0, images: 0, videos: 0, authors: 0, dateRange: null };
       const authors = new Set(messages.map(m => m.author));
@@ -73,7 +70,6 @@
       };
     }
 
-    // Filter
     function getFiltered() {
       return messages
         .filter(m => {
@@ -104,13 +100,22 @@
       return { images, videos };
     }
 
-    // Export
     function exportJSON() {
-      const blob = new Blob([JSON.stringify(getFiltered(), null, 2)], { type: 'application/json' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = `${fileName.replace('.json', '')}_export.json`;
-      a.click();
+      const filtered = getFiltered();
+      const json = JSON.stringify(filtered, null, 2);
+      if (typeof chrome !== 'undefined' && chrome.storage) {
+        const blob = new Blob([json], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `${fileName.replace('.json', '')}_export.json`;
+        a.click();
+      } else {
+        const blob = new Blob([json], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `${fileName.replace('.json', '')}_export.json`;
+        a.click();
+      }
     }
 
     function exportCSV() {
@@ -127,8 +132,10 @@
 
     function openLightbox(url) { selectedImage = url; render(); }
     function closeLightbox() { selectedImage = null; render(); }
+    function setView(v) { currentView = v; render(); }
+    function clearData() { messages = []; fileName = ''; searchQuery = ''; authorFilter = ''; channelFilter = ''; render(); }
+    function escapeHTML(str) { return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/`([^`]+)`/g, '<code class="bg-white/10 px-1.5 py-0.5 rounded text-sm">$1</code>').replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>'); }
 
-    // Render
     function render() {
       const app = document.getElementById('app');
       const stats = getStats();
@@ -144,17 +151,18 @@
               <p class="text-[#71717a] mb-2">View your scraped Discord data with images, videos, and messages.</p>
               <p class="text-[#52525b] text-sm mb-8">Drop a JSON file or click to upload</p>
               <input type="file" id="fileInput" accept=".json" class="hidden">
-              <button onclick="document.getElementById('fileInput').click()" class="px-8 py-4 text-white rounded-2xl font-semibold hover:opacity-90 transition-all hover:scale-105 active:scale-95 shadow-lg" style="background: linear-gradient(135deg, #5865f2, #eb459e); box-shadow: 0 10px 40px rgba(88,101,242,0.25);">
+              <button id="uploadBtn" class="px-8 py-4 text-white rounded-2xl font-semibold hover:opacity-90 transition-all hover:scale-105 active:scale-95 shadow-lg" style="background: linear-gradient(135deg, #5865f2, #eb459e); box-shadow: 0 10px 40px rgba(88,101,242,0.25);">
                 Upload JSON File
               </button>
             </div>
           </div>
         `;
-        document.getElementById('fileInput').onchange = (e) => handleFile(e.target.files[0]);
+        document.getElementById('uploadBtn').addEventListener('click', () => document.getElementById('fileInput').click());
+        document.getElementById('fileInput').addEventListener('change', (e) => handleFile(e.target.files[0]));
         const dz = document.getElementById('dropzone');
-        dz.ondragover = (e) => { e.preventDefault(); dz.classList.add('drag-over'); };
-        dz.ondragleave = () => dz.classList.remove('drag-over');
-        dz.ondrop = (e) => { e.preventDefault(); dz.classList.remove('drag-over'); handleFile(e.dataTransfer.files[0]); };
+        dz.addEventListener('dragover', (e) => { e.preventDefault(); dz.classList.add('drag-over'); });
+        dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+        dz.addEventListener('drop', (e) => { e.preventDefault(); dz.classList.remove('drag-over'); handleFile(e.dataTransfer.files[0]); });
         return;
       }
 
@@ -166,7 +174,7 @@
       const chatHTML = filtered.map(m => {
         const mediaHTML = [...m.attachments, ...m.embeds].map(url => {
           const c = url.split('?')[0];
-          if (/\.(jpg|jpeg|png|gif|webp)$/i.test(c)) return `<button onclick="openLightbox('${url}')" class="block"><img src="${url}" alt="" class="max-w-xs max-h-48 rounded-xl object-cover hover:opacity-80 transition-opacity" loading="lazy"></button>`;
+          if (/\.(jpg|jpeg|png|gif|webp)$/i.test(c)) return `<button data-lightbox="${url}" class="block lightbox-btn"><img src="${url}" alt="" class="max-w-xs max-h-48 rounded-xl object-cover hover:opacity-80 transition-opacity" loading="lazy"></button>`;
           if (/\.(mp4|webm|mov)$/i.test(c)) return `<video src="${url}" controls class="max-w-xs max-h-48 rounded-xl"></video>`;
           return `<a href="${url}" target="_blank" class="inline-flex items-center gap-2 px-4 py-2 bg-[#1a1a2e] rounded-xl text-sm text-[#5865f2] hover:bg-[#1e1e3a] transition-colors border border-white/5">📎 ${c.split('/').pop()?.slice(0, 30)}</a>`;
         }).join('');
@@ -196,7 +204,7 @@
           </h3>
           <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
             ${images.map(img => `
-              <button onclick="openLightbox('${img.url}')" class="img-card group relative aspect-square rounded-2xl overflow-hidden bg-[#111118] border border-white/5 hover:border-[#5865f2]/50 transition-all">
+              <button data-lightbox="${img.url}" class="img-card group relative aspect-square rounded-2xl overflow-hidden bg-[#111118] border border-white/5 hover:border-[#5865f2]/50 transition-all lightbox-btn">
                 <img src="${img.url}" alt="" class="w-full h-full object-cover" loading="lazy">
                 <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
                   <div class="absolute bottom-3 left-3 right-3">
@@ -234,7 +242,7 @@
           ${gridItems.map(item => `
             <div class="group relative aspect-square rounded-xl overflow-hidden bg-[#111118] border border-white/5">
               ${item.type === 'image'
-                ? `<button onclick="openLightbox('${item.url}')" class="w-full h-full"><img src="${item.url}" alt="" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" loading="lazy"></button>`
+                ? `<button data-lightbox="${item.url}" class="w-full h-full lightbox-btn"><img src="${item.url}" alt="" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" loading="lazy"></button>`
                 : `<video src="${item.url}" class="w-full h-full object-cover"></video>`
               }
               ${item.type === 'video' ? '<div class="absolute top-2 right-2"><span class="px-1.5 py-0.5 bg-[#ed4245] text-white text-[9px] rounded font-bold">VID</span></div>' : ''}
@@ -251,22 +259,18 @@
 
       app.innerHTML = `
         <div class="flex h-screen">
-          <!-- Sidebar -->
           <div class="w-72 bg-[#111118] flex-shrink-0 p-5 flex flex-col border-r border-white/5">
             <div class="mb-6">
               <h2 class="text-xl font-bold text-white mb-1 truncate">${fileName.replace('.json', '')}</h2>
               <p class="text-xs text-[#71717a]">${stats.total.toLocaleString()} messages${stats.dateRange ? ` · ${stats.dateRange.first} — ${stats.dateRange.last}` : ''}</p>
             </div>
-
             <div class="grid grid-cols-2 gap-2 mb-6">
               <div class="stat-card"><div class="text-lg font-bold text-white">${stats.total.toLocaleString()}</div><div class="text-[10px] text-[#52525b] uppercase tracking-wider">Messages</div></div>
               <div class="stat-card"><div class="text-lg font-bold text-[#5865f2]">${stats.images.toLocaleString()}</div><div class="text-[10px] text-[#52525b] uppercase tracking-wider">Images</div></div>
               <div class="stat-card"><div class="text-lg font-bold text-[#ed4245]">${stats.videos.toLocaleString()}</div><div class="text-[10px] text-[#52525b] uppercase tracking-wider">Videos</div></div>
               <div class="stat-card"><div class="text-lg font-bold text-[#23a55a]">${stats.authors.toLocaleString()}</div><div class="text-[10px] text-[#52525b] uppercase tracking-wider">Authors</div></div>
             </div>
-
             <input type="text" id="searchInput" placeholder="Search messages..." value="${searchQuery}" class="mb-4">
-
             <div class="space-y-3 mb-4">
               <select id="authorSelect">
                 <option value="">All authors (${authors.length})</option>
@@ -283,46 +287,58 @@
                 <option value="oldest" ${sortBy === 'oldest' ? 'selected' : ''}>Oldest first</option>
               </select>
             </div>
-
             <div class="flex gap-1 p-1 bg-[#0a0a0f] rounded-xl mb-4 border border-white/5">
-              ${['chat', 'media', 'grid'].map(v => `
-                <button onclick="setView('${v}')" class="flex-1 py-2 rounded-lg text-xs font-medium transition-all capitalize ${currentView === v ? 'bg-[#5865f2] text-white shadow-lg' : 'text-[#71717a] hover:text-white'}">${v}</button>
-              `).join('')}
+              <button data-view="chat" class="view-btn flex-1 py-2 rounded-lg text-xs font-medium transition-all capitalize ${currentView === 'chat' ? 'bg-[#5865f2] text-white shadow-lg' : 'text-[#71717a] hover:text-white'}">chat</button>
+              <button data-view="media" class="view-btn flex-1 py-2 rounded-lg text-xs font-medium transition-all capitalize ${currentView === 'media' ? 'bg-[#5865f2] text-white shadow-lg' : 'text-[#71717a] hover:text-white'}">media</button>
+              <button data-view="grid" class="view-btn flex-1 py-2 rounded-lg text-xs font-medium transition-all capitalize ${currentView === 'grid' ? 'bg-[#5865f2] text-white shadow-lg' : 'text-[#71717a] hover:text-white'}">grid</button>
             </div>
-
             <div class="flex-1"></div>
-
             <div class="space-y-2">
-              <button onclick="exportJSON()" class="w-full py-2 text-xs text-[#5865f2] hover:text-[#7289da] transition-colors">Export JSON</button>
-              <button onclick="exportCSV()" class="w-full py-2 text-xs text-[#5865f2] hover:text-[#7289da] transition-colors">Export CSV</button>
-              <button onclick="clearData()" class="w-full py-2 text-xs text-[#52525b] hover:text-[#ed4245] transition-colors">Clear data</button>
+              <button id="exportJsonBtn" class="w-full py-2 text-xs text-[#5865f2] hover:text-[#7289da] transition-colors">Export JSON</button>
+              <button id="exportCsvBtn" class="w-full py-2 text-xs text-[#5865f2] hover:text-[#7289da] transition-colors">Export CSV</button>
+              <button id="clearDataBtn" class="w-full py-2 text-xs text-[#52525b] hover:text-[#ed4245] transition-colors">Clear data</button>
             </div>
           </div>
-
-          <!-- Main -->
-          <div class="flex-1 overflow-y-auto">
-            ${viewContent}
-          </div>
+          <div class="flex-1 overflow-y-auto">${viewContent}</div>
         </div>
-
         ${selectedImage ? `
-          <div class="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-8" onclick="closeLightbox()">
-            <button class="absolute top-4 right-4 text-white/50 hover:text-white text-4xl">&times;</button>
-            <img src="${selectedImage}" alt="" class="max-w-full max-h-full object-contain rounded-2xl" onclick="event.stopPropagation()">
+          <div id="lightboxOverlay" class="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-8">
+            <button id="closeLightbox" class="absolute top-4 right-4 text-white/50 hover:text-white text-4xl">&times;</button>
+            <img src="${selectedImage}" alt="" class="max-w-full max-h-full object-contain rounded-2xl" id="lightboxImg">
           </div>
         ` : ''}
       `;
 
-      // Bind events
       document.getElementById('searchInput')?.addEventListener('input', (e) => { searchQuery = e.target.value; render(); });
       document.getElementById('authorSelect')?.addEventListener('change', (e) => { authorFilter = e.target.value; render(); });
       document.getElementById('channelSelect')?.addEventListener('change', (e) => { channelFilter = e.target.value; render(); });
       document.getElementById('sortSelect')?.addEventListener('change', (e) => { sortBy = e.target.value; render(); });
+      document.getElementById('exportJsonBtn')?.addEventListener('click', exportJSON);
+      document.getElementById('exportCsvBtn')?.addEventListener('click', exportCSV);
+      document.getElementById('clearDataBtn')?.addEventListener('click', clearData);
+      document.querySelectorAll('.view-btn').forEach(btn => {
+        btn.addEventListener('click', () => setView(btn.dataset.view));
+      });
+      document.querySelectorAll('.lightbox-btn').forEach(btn => {
+        btn.addEventListener('click', () => openLightbox(btn.dataset.lightbox));
+      });
+      document.getElementById('closeLightbox')?.addEventListener('click', closeLightbox);
+      document.getElementById('lightboxOverlay')?.addEventListener('click', (e) => {
+        if (e.target === e.currentTarget) closeLightbox();
+      });
     }
 
-    function setView(v) { currentView = v; render(); }
-    function clearData() { messages = []; fileName = ''; searchQuery = ''; authorFilter = ''; channelFilter = ''; render(); }
-    function escapeHTML(str) { return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/`([^`]+)`/g, '<code class="bg-white/10 px-1.5 py-0.5 rounded text-sm">$1</code>').replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>'); }
+    if (typeof chrome !== 'undefined' && chrome.storage) {
+      chrome.storage.local.get('viewerData', (data) => {
+        if (data.viewerData) {
+          try {
+            messages = JSON.parse(data.viewerData);
+            fileName = 'Discord Scrape';
+            render();
+          } catch {}
+        }
+      });
+    }
 
     render();
   </script>
