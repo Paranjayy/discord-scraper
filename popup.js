@@ -547,14 +547,20 @@ document.addEventListener('DOMContentLoaded', () => {
   viewerBtn.addEventListener('click', openViewer);
 
   function openViewer() {
-    const msgs = Object.values(allMessages).flat().map(m => ({
-      author: m.author?.username || 'Unknown',
-      content: m.content || '',
-      timestamp: m.timestamp,
-      attachments: (m.attachments || []).map(a => a.url),
-      embeds: (m.embeds || []).map(e => e.url || ''),
-      channel: m._channel || ''
-    }));
+    const msgs = [];
+    for (const [channelName, messages] of Object.entries(allMessages)) {
+      for (const m of messages) {
+        msgs.push({
+          author: m.author?.username || 'Unknown',
+          content: m.content || '',
+          timestamp: m.timestamp,
+          attachments: (m.attachments || []).map(a => a.url),
+          embeds: (m.embeds || []).map(e => e.url || e.image?.url || ''),
+          channel: channelName,
+        });
+      }
+    }
+    if (!msgs.length) { showStatus('No data to view — scrape first', 'error'); return; }
     const json = JSON.stringify(msgs);
     chrome.storage.local.set({ viewerData: json }, () => {
       chrome.tabs.create({ url: chrome.runtime.getURL('viewer/index.html') });
