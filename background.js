@@ -101,6 +101,18 @@ function downloadSingle(url, filename) {
   });
 }
 
+function sanitize(str) {
+  return str.replace(/[^a-zA-Z0-9._-]/g, '_').substring(0, 60);
+}
+
+function buildFilename(file, serverName) {
+  const safeServer = sanitize(serverName);
+  const safeChannel = sanitize(file.channel);
+  const safeName = sanitize(file.name);
+  const typeDir = file.type + 's';
+  return `${safeServer}_${safeChannel}_${typeDir}/${safeName}`;
+}
+
 async function handleDownloadFiles(files, serverName, tabId) {
   const total = files.length;
   let done = 0;
@@ -110,9 +122,7 @@ async function handleDownloadFiles(files, serverName, tabId) {
   for (let i = 0; i < files.length; i += CONCURRENCY) {
     const batch = files.slice(i, i + CONCURRENCY);
     const promises = batch.map(async (file) => {
-      const folderPath = `${serverName}/${file.channel}/${file.type}s`;
-      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-      const filename = `${folderPath}/${safeName}`;
+      const filename = buildFilename(file, serverName);
 
       const result = await downloadSingle(file.url, filename);
       if (!result.ok) {

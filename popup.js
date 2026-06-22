@@ -205,6 +205,7 @@ document.addEventListener('DOMContentLoaded', () => {
     allMessages = {}; allMedia = {};
     counter.textContent = ''; actions.style.display = 'none'; results.style.display = 'none';
     stats.style.display = 'none';
+    document.getElementById('statsDetail').style.display = 'none';
   }
 
   scanBtn.addEventListener('click', startScraping);
@@ -395,6 +396,30 @@ document.addEventListener('DOMContentLoaded', () => {
     videoCount.textContent = all.filter(f => f.type === 'video').length;
     zipCount.textContent = all.filter(f => ['zip','pdf','audio','code','doc'].includes(f.type)).length;
     otherCount.textContent = Object.values(allMessages).flat().length;
+
+    const sizes = all.map(f => {
+      const num = parseInt(f.size);
+      return isNaN(num) ? 0 : num;
+    }).filter(s => s > 0);
+
+    if (sizes.length > 0) {
+      const total = sizes.reduce((a, b) => a + b, 0);
+      const avg = total / sizes.length;
+      const min = Math.min(...sizes);
+      const max = Math.max(...sizes);
+      const fmtBytes = (b) => {
+        if (b < 1024) return b + ' B';
+        if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+        return (b / 1048576).toFixed(1) + ' MB';
+      };
+      const totalMB = (total / 1048576).toFixed(1);
+      document.getElementById('statAvg').textContent = fmtBytes(avg);
+      document.getElementById('statMin').textContent = fmtBytes(min);
+      document.getElementById('statMax').textContent = fmtBytes(max);
+      document.getElementById('statTotal').textContent = totalMB + ' MB';
+      document.getElementById('statsDetail').style.display = 'grid';
+    }
+
     stats.style.display = 'grid';
   }
 

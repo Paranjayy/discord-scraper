@@ -13,7 +13,7 @@ body {
 }
 
 .container {
-  padding: 16px;
+  padding: 12px;
 }
 
 /* Header */
@@ -21,8 +21,8 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 16px;
-  padding-bottom: 12px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
   border-bottom: 1px solid #3f4147;
 }
 
@@ -48,8 +48,8 @@ h1 {
   background: #1e1f22;
   border: 1px solid #3f4147;
   border-radius: 10px;
-  padding: 12px;
-  margin-bottom: 10px;
+  padding: 10px;
+  margin-bottom: 8px;
 }
 
 .card-header {
@@ -214,7 +214,7 @@ h1 {
 }
 
 .channel-list {
-  max-height: 120px;
+  max-height: 200px;
   overflow-y: auto;
   background: #111214;
   border: 1px solid #3f4147;
@@ -284,8 +284,8 @@ h1 {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  padding: 8px 4px;
+  gap: 3px;
+  padding: 6px 4px;
   background: #111214;
   border: 1px solid #3f4147;
   border-radius: 8px;
@@ -525,6 +525,36 @@ h1 {
   color: #6d6f78;
   text-transform: uppercase;
   letter-spacing: 0.3px;
+}
+
+.stats-detail {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.stat-detail-item {
+  background: #1e1f22;
+  border: 1px solid #3f4147;
+  border-radius: 8px;
+  padding: 6px 4px;
+  text-align: center;
+}
+
+.stat-detail-label {
+  display: block;
+  font-size: 9px;
+  color: #6d6f78;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-bottom: 2px;
+}
+
+.stat-detail-value {
+  font-size: 12px;
+  font-weight: 600;
+  color: #dbdee1;
 }
 
 /* Download Progress */
