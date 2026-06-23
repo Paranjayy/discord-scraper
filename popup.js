@@ -158,24 +158,52 @@ document.addEventListener('DOMContentLoaded', () => {
       const res = await fetch(`https://discord.com/api/v10/guilds/${serverId}/channels`, { headers: { Authorization: t } });
       if (!res.ok) throw new Error();
       const all = await res.json();
-      channels = all.filter(c => c.type === 0 || c.type === 5);
+      const textChannels = all.filter(c => c.type === 0 || c.type === 5);
+      const categories = all.filter(c => c.type === 4);
+      const catMap = {};
+      categories.forEach(c => { catMap[c.id] = c.name; });
+      channels = textChannels.map(c => ({
+        ...c,
+        categoryName: catMap[c.parent_id] || 'Uncategorized'
+      }));
       renderChannelList();
     } catch { showStatus('Failed to load channels', 'error'); }
   }
 
   function renderChannelList() {
     channelList.innerHTML = '';
+    const grouped = {};
     channels.forEach(c => {
-      const label = document.createElement('label');
-      label.className = 'channel-item';
-      const icon = c.type === 5 ? '📢' : '#';
-      label.innerHTML = `
-        <input type="checkbox" class="channel-checkbox" value="${c.id}" data-name="${c.name}" checked>
-        <span class="checkmark"></span>
-        <span class="channel-name">${icon} ${c.name}</span>
-      `;
-      channelList.appendChild(label);
+      const cat = c.categoryName || 'Uncategorized';
+      if (!grouped[cat]) grouped[cat] = [];
+      grouped[cat].push(c);
     });
+
+    const catOrder = Object.keys(grouped).sort((a, b) => {
+      if (a === 'Uncategorized') return 1;
+      if (b === 'Uncategorized') return -1;
+      return a.localeCompare(b);
+    });
+
+    catOrder.forEach(cat => {
+      const catHeader = document.createElement('div');
+      catHeader.className = 'category-header';
+      catHeader.textContent = cat;
+      channelList.appendChild(catHeader);
+
+      grouped[cat].forEach(c => {
+        const label = document.createElement('label');
+        label.className = 'channel-item';
+        const icon = c.type === 5 ? '📢' : '#';
+        label.innerHTML = `
+          <input type="checkbox" class="channel-checkbox" value="${c.id}" data-name="${c.name}" checked>
+          <span class="checkmark"></span>
+          <span class="channel-name">${icon} ${c.name}</span>
+        `;
+        channelList.appendChild(label);
+      });
+    });
+
     updateChannelCount();
     channelList.querySelectorAll('.channel-checkbox').forEach(cb => cb.addEventListener('change', updateChannelCount));
   }
