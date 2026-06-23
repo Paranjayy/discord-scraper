@@ -952,3 +952,90 @@ h1 {
   color: #6d6f78;
   flex-shrink: 0;
 }
+
+.history-actions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.history-action-btn {
+  background: none;
+  border: 1px solid #3f4147;
+  border-radius: 4px;
+  padding: 3px;
+  cursor: pointer;
+  color: #949ba4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.1s;
+}
+
+.history-action-btn:hover {
+  background: #35373c;
+  color: #dbdee1;
+  border-color: #5865f2;
+}
+
+.history-action-delete:hover {
+  border-color: #ed4245;
+  color: #ed4245;
+}
+
+/* Batch Size Control */
+.batch-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.batch-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #6d6f78;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+.batch-select {
+  flex: 1;
+  padding: 5px 8px;
+  background: #111214;
+  border: 1px solid #3f4147;
+  border-radius: 4px;
+  color: #dbdee1;
+  font-size: 11px;
+  outline: none;
+  cursor: pointer;
+}
+
+.batch-select:focus {
+  border-color: #5865f2;
+}
+
+/* Resume Banner */
+.resume-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: rgba(254, 231, 92, 0.08);
+  border: 1px solid rgba(254, 231, 92, 0.2);
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+
+.resume-banner-text {
+  flex: 1;
+  font-size: 11px;
+  color: #fee75c;
+}
+
+.resume-banner .btn-sm {
+  width: auto;
+  padding: 4px 8px;
+  font-size: 10px;
+}

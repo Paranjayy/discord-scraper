@@ -57,8 +57,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.action === 'downloadFiles') {
-    const { files, serverName } = request;
-    handleDownloadFiles(files, serverName, sender.id).then(sendResponse);
+    const { files, serverName, concurrency } = request;
+    handleDownloadFiles(files, serverName, sender.id, concurrency).then(sendResponse);
     return true;
   }
 
@@ -113,11 +113,11 @@ function buildFilename(file, serverName) {
   return `${safeServer}_${safeChannel}_${typeDir}/${safeName}`;
 }
 
-async function handleDownloadFiles(files, serverName, tabId) {
+async function handleDownloadFiles(files, serverName, tabId, concurrency = 5) {
   const total = files.length;
   let done = 0;
   let failed = 0;
-  const CONCURRENCY = 5;
+  const CONCURRENCY = concurrency;
 
   for (let i = 0; i < files.length; i += CONCURRENCY) {
     const batch = files.slice(i, i + CONCURRENCY);

@@ -42,6 +42,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const authorFilter = $('authorFilter');
   const searchFilter = $('searchFilter');
   const selectAllTypes = $('selectAllTypes');
+  const batchSize = $('batchSize');
+  const resumeBanner = $('resumeBanner');
+  const resumeBannerText = $('resumeBannerText');
+  const resumeBtn = $('resumeBtn');
+  const dismissResumeBtn = $('dismissResumeBtn');
 
   const filterImages = $('filterImages');
   const filterVideos = $('filterVideos');
@@ -127,6 +132,7 @@ document.addEventListener('DOMContentLoaded', () => {
       tokenSection.style.display = 'none';
       mainSection.style.display = 'block';
       await loadServers(t);
+      checkResume();
     } catch {
       showStatus('Invalid token.', 'error');
       token = null;
@@ -240,6 +246,44 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('statsDetail').style.display = 'none';
   }
 
+  function checkResume() {
+    chrome.storage.local.get('lastScrape', (data) => {
+      if (data.lastScrape && data.lastScrape.channels) {
+        const ago = Math.round((Date.now() - data.lastScrape.time) / 60000);
+        resumeBannerText.textContent = `Last scrape of ${data.lastScrape.serverName} interrupted ${ago}m ago (${data.lastScrape.channels.length} channels)`;
+        resumeBanner.style.display = 'flex';
+      }
+    });
+  }
+
+  resumeBtn.addEventListener('click', async () => {
+    chrome.storage.local.get('lastScrape', async (data) => {
+      if (!data.lastScrape) return;
+      // Select the server
+      for (let i = 0; i < serverSelect.options.length; i++) {
+        if (serverSelect.options[i].textContent === data.lastScrape.serverName) {
+          serverSelect.selectedIndex = i;
+          break;
+        }
+      }
+      serverSelect.dispatchEvent(new Event('change'));
+      await new Promise(r => setTimeout(r, 500));
+      // Check the channels
+      for (const ch of data.lastScrape.channels) {
+        const cb = channelList.querySelector(`.channel-checkbox[value="${ch.id}"]`);
+        if (cb) cb.checked = true;
+      }
+      updateChannelCount();
+      resumeBanner.style.display = 'none';
+      startScraping();
+    });
+  });
+
+  dismissResumeBtn.addEventListener('click', () => {
+    resumeBanner.style.display = 'none';
+    chrome.storage.local.remove('lastScrape');
+  });
+
   scanBtn.addEventListener('click', startScraping);
   stopBtn.addEventListener('click', () => { abort = true; });
 
@@ -255,6 +299,12 @@ document.addEventListener('DOMContentLoaded', () => {
     progressBar.style.display = 'block'; progressFill.style.width = '0%';
     channelProgress.style.display = 'block';
     downloadProgress.style.display = 'none';
+    resumeBanner.style.display = 'none';
+
+    const serverName = serverSelect.options[serverSelect.selectedIndex]?.text || 'server';
+    chrome.storage.local.set({
+      lastScrape: { serverName, channels: selected.map(c => ({ id: c.id, name: c.name })), time: Date.now() }
+    });
 
     for (let i = 0; i < selected.length; i++) {
       if (abort) break;
@@ -277,9 +327,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const totalMedia = Object.values(allMedia).flat().length;
     if (totalMsgs > 0 && !abort) {
       showStatus(`Done! ${totalMsgs} messages, ${totalMedia} files from ${selected.length} channels.`, 'success');
-      const serverName = serverSelect.options[serverSelect.selectedIndex]?.text || 'server';
       saveScrapeHistory(serverName, selected.length, totalMsgs, totalMedia);
     }
+    chrome.storage.local.remove('lastScrape');
   }
 
   async function fetchChannelMessages(t, channelId, channelName) {
@@ -590,7 +640,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     const result = await new Promise(resolve => {
-      chrome.runtime.sendMessage({ action: 'downloadFiles', files, serverName }, resolve);
+      chrome.runtime.sendMessage({ action: 'downloadFiles', files, serverName, concurrency: parseInt(batchSize.value) }, resolve);
     });
 
     downloadProgress.style.display = 'none';
@@ -796,12 +846,14 @@ document.addEventListener('DOMContentLoaded', () => {
       channels: channelsScraped,
       messages: msgCount,
       files: fileCount,
-      time: Date.now()
+      time: Date.now(),
+      media: JSON.parse(JSON.stringify(allMedia)),
+      messagesData: JSON.parse(JSON.stringify(allMessages))
     };
     chrome.storage.local.get('scrapeHistory', (data) => {
       const history = data.scrapeHistory || [];
       history.unshift(entry);
-      if (history.length > 10) history.pop();
+      if (history.length > 5) history.pop();
       chrome.storage.local.set({ scrapeHistory: history }, renderHistory);
     });
   }
@@ -814,7 +866,8 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
       historyList.innerHTML = '';
-      for (const h of history) {
+      for (let i = 0; i < history.length; i++) {
+        const h = history[i];
         const d = new Date(h.time);
         const timeStr = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' ' +
                         d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
@@ -828,10 +881,94 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="history-server">${escapeHtml(h.server)}</div>
             <div class="history-meta">${h.channels} ch · ${h.messages} msgs · ${h.files} files</div>
           </div>
+          <div class="history-actions">
+            <button class="history-action-btn" title="Re-download files" data-idx="${i}">
+              <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+            </button>
+            <button class="history-action-btn" title="Open in viewer" data-idx="${i}" data-view="true">
+              <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
+            </button>
+            <button class="history-action-btn history-action-delete" title="Delete" data-idx="${i}" data-delete="true">
+              <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+            </button>
+          </div>
           <div class="history-time">${timeStr}</div>
         `;
         historyList.appendChild(div);
       }
+
+      historyList.querySelectorAll('.history-action-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const idx = parseInt(btn.dataset.idx);
+          if (btn.dataset.delete) {
+            deleteHistoryItem(idx);
+          } else if (btn.dataset.view) {
+            viewHistoryItem(idx);
+          } else {
+            redownloadHistoryItem(idx);
+          }
+        });
+      });
+    });
+  }
+
+  function deleteHistoryItem(idx) {
+    chrome.storage.local.get('scrapeHistory', (data) => {
+      const history = data.scrapeHistory || [];
+      history.splice(idx, 1);
+      chrome.storage.local.set({ scrapeHistory: history }, renderHistory);
+    });
+  }
+
+  function viewHistoryItem(idx) {
+    chrome.storage.local.get('scrapeHistory', (data) => {
+      const history = data.scrapeHistory || [];
+      const entry = history[idx];
+      if (!entry || !entry.messagesData) { showStatus('No data for this scrape', 'error'); return; }
+      const msgs = [];
+      for (const [channelName, messages] of Object.entries(entry.messagesData)) {
+        for (const m of messages) {
+          msgs.push({
+            author: m.author?.username || 'Unknown',
+            content: m.content || '',
+            timestamp: m.timestamp,
+            attachments: (m.attachments || []).map(a => a.url),
+            embeds: (m.embeds || []).map(e => e.url || e.image?.url || ''),
+            channel: channelName,
+          });
+        }
+      }
+      if (!msgs.length) { showStatus('No data to view', 'error'); return; }
+      chrome.storage.local.set({ viewerData: JSON.stringify(msgs) }, () => {
+        chrome.tabs.create({ url: chrome.runtime.getURL('viewer/index.html') });
+      });
+    });
+  }
+
+  function redownloadHistoryItem(idx) {
+    chrome.storage.local.get('scrapeHistory', (data) => {
+      const history = data.scrapeHistory || [];
+      const entry = history[idx];
+      if (!entry || !entry.media) { showStatus('No files for this scrape', 'error'); return; }
+      const files = [];
+      for (const chFiles of Object.values(entry.media)) {
+        for (const f of chFiles) {
+          files.push({ url: f.url, name: f.name, type: f.type, channel: f.channel || 'unknown' });
+        }
+      }
+      if (!files.length) { showStatus('No files to download', 'error'); return; }
+      downloadProgress.style.display = 'block';
+      downloadText.textContent = `Re-downloading ${files.length} files from ${entry.server}...`;
+      downloadFill.style.width = '0%';
+      chrome.runtime.sendMessage({ action: 'downloadFiles', files, serverName: entry.server }, (result) => {
+        downloadProgress.style.display = 'none';
+        if (result && result.success) {
+          showStatus(`Re-download complete! ${result.total - result.failed} succeeded, ${result.failed} failed.`, 'success');
+        } else {
+          showStatus('Re-download failed', 'error');
+        }
+      });
     });
   }
 
