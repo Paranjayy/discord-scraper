@@ -146,6 +146,7 @@ document.addEventListener('DOMContentLoaded', () => {
         serverSelect.appendChild(opt);
       });
       await loadChannels(t);
+      loadServerInfo();
     } catch { showStatus('Failed to load servers', 'error'); }
   }
 
@@ -199,6 +200,9 @@ document.addEventListener('DOMContentLoaded', () => {
           <input type="checkbox" class="channel-checkbox" value="${c.id}" data-name="${c.name}" checked>
           <span class="checkmark"></span>
           <span class="channel-name">${icon} ${c.name}</span>
+          <span class="channel-preview-btn" title="Preview channel" data-id="${c.id}" data-name="${c.name}">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="#6d6f78"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
+          </span>
         `;
         channelList.appendChild(label);
       });
@@ -273,6 +277,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const totalMedia = Object.values(allMedia).flat().length;
     if (totalMsgs > 0 && !abort) {
       showStatus(`Done! ${totalMsgs} messages, ${totalMedia} files from ${selected.length} channels.`, 'success');
+      const serverName = serverSelect.options[serverSelect.selectedIndex]?.text || 'server';
+      saveScrapeHistory(serverName, selected.length, totalMsgs, totalMedia);
     }
   }
 
@@ -669,6 +675,167 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const viewerBtn = $('viewerBtn');
   viewerBtn.addEventListener('click', openViewer);
+
+  // === Server Info ===
+  const serverInfoCard = $('serverInfoCard');
+  const serverInfo = $('serverInfo');
+
+  async function loadServerInfo() {
+    const serverId = serverSelect.value;
+    if (!serverId || !token) { serverInfoCard.style.display = 'none'; return; }
+    try {
+      const res = await fetch(`https://discord.com/api/v10/guilds/${serverId}?with_counts=true`, { headers: { Authorization: token } });
+      if (!res.ok) throw new Error();
+      const g = await res.json();
+      serverInfoCard.style.display = 'block';
+      const iconUrl = g.icon ? `https://cdn.discordapp.com/icons/${g.id}/${g.icon}.png?size=64` : '';
+      const initial = g.name.charAt(0).toUpperCase();
+      serverInfo.innerHTML = `
+        <div class="server-info-header">
+          <div class="server-icon">${iconUrl ? `<img src="${iconUrl}" alt="">` : initial}</div>
+          <div>
+            <div class="server-name">${g.name}</div>
+            <div class="server-meta">${g.description || 'No description'}</div>
+          </div>
+        </div>
+        <div class="server-stats-row">
+          <div class="server-stat">
+            <div class="server-stat-value">${g.approximate_member_count?.toLocaleString() || '?'}</div>
+            <div class="server-stat-label">Members</div>
+          </div>
+          <div class="server-stat">
+            <div class="server-stat-value">${g.approximate_online_count?.toLocaleString() || '?'}</div>
+            <div class="server-stat-label">Online</div>
+          </div>
+          <div class="server-stat">
+            <div class="server-stat-value">${channels.length}</div>
+            <div class="server-stat-label">Channels</div>
+          </div>
+        </div>
+      `;
+    } catch {
+      serverInfoCard.style.display = 'none';
+    }
+  }
+
+  serverSelect.addEventListener('change', () => {
+    serverInfoCard.style.display = 'none';
+    channelPreviewCard.style.display = 'none';
+    loadServerInfo();
+  });
+
+  // === Channel Preview ===
+  const channelPreviewCard = $('channelPreviewCard');
+  const channelPreviewName = $('channelPreviewName');
+  const channelPreviewList = $('channelPreviewList');
+
+  async function loadChannelPreview(channelId, channelName) {
+    channelPreviewCard.style.display = 'block';
+    channelPreviewName.textContent = '#' + channelName;
+    channelPreviewList.innerHTML = '<p class="empty-hint">Loading preview...</p>';
+    try {
+      const res = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages?limit=5`, { headers: { Authorization: token } });
+      if (!res.ok) throw new Error();
+      const msgs = await res.json();
+      if (!msgs.length) {
+        channelPreviewList.innerHTML = '<p class="empty-hint">No messages yet</p>';
+        return;
+      }
+      channelPreviewList.innerHTML = '';
+      for (const m of msgs.reverse()) {
+        const author = m.author?.username || 'Unknown';
+        const avatar = m.author?.avatar
+          ? `https://cdn.discordapp.com/avatars/${m.author.id}/${m.author.avatar}.png?size=32`
+          : '';
+        const initial = author.charAt(0).toUpperCase();
+        const time = new Date(m.timestamp);
+        const timeStr = time.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' ' +
+                        time.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+        const content = m.content || '';
+        const attachCount = (m.attachments || []).length;
+        const embedCount = (m.embeds || []).length;
+        const div = document.createElement('div');
+        div.className = 'preview-msg';
+        div.innerHTML = `
+          <div class="preview-msg-header">
+            <div class="preview-msg-avatar">${avatar ? `<img src="${avatar}" alt="">` : initial}</div>
+            <span class="preview-msg-author">${author}</span>
+            <span class="preview-msg-time">${timeStr}</span>
+          </div>
+          <div class="preview-msg-content">${escapeHtml(content) || '<em style="color:#6d6f78">No text</em>'}</div>
+          ${(attachCount || embedCount) ? `<div class="preview-msg-attachments">${attachCount ? `<span class="preview-msg-attachment">${attachCount} file${attachCount > 1 ? 's' : ''}</span>` : ''}${embedCount ? `<span class="preview-msg-attachment">${embedCount} embed${embedCount > 1 ? 's' : ''}</span>` : ''}</div>` : ''}
+        `;
+        channelPreviewList.appendChild(div);
+      }
+    } catch {
+      channelPreviewList.innerHTML = '<p class="empty-hint">Failed to load preview</p>';
+    }
+  }
+
+  function escapeHtml(str) {
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  // Listen for channel preview button clicks
+  channelList.addEventListener('click', (e) => {
+    const btn = e.target.closest('.channel-preview-btn');
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const ch = channels.find(c => c.id === btn.dataset.id);
+    if (ch) loadChannelPreview(ch.id, ch.name);
+  });
+
+  // === Scrape History ===
+  const historyCard = $('historyCard');
+  const historyList = $('historyList');
+
+  function saveScrapeHistory(serverName, channelsScraped, msgCount, fileCount) {
+    const entry = {
+      server: serverName,
+      channels: channelsScraped,
+      messages: msgCount,
+      files: fileCount,
+      time: Date.now()
+    };
+    chrome.storage.local.get('scrapeHistory', (data) => {
+      const history = data.scrapeHistory || [];
+      history.unshift(entry);
+      if (history.length > 10) history.pop();
+      chrome.storage.local.set({ scrapeHistory: history }, renderHistory);
+    });
+  }
+
+  function renderHistory() {
+    chrome.storage.local.get('scrapeHistory', (data) => {
+      const history = data.scrapeHistory || [];
+      if (!history.length) {
+        historyList.innerHTML = '<p class="empty-hint">No scrape history yet</p>';
+        return;
+      }
+      historyList.innerHTML = '';
+      for (const h of history) {
+        const d = new Date(h.time);
+        const timeStr = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' ' +
+                        d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+        const div = document.createElement('div');
+        div.className = 'history-item';
+        div.innerHTML = `
+          <div class="history-icon">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="#5865f2"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+          </div>
+          <div class="history-details">
+            <div class="history-server">${escapeHtml(h.server)}</div>
+            <div class="history-meta">${h.channels} ch · ${h.messages} msgs · ${h.files} files</div>
+          </div>
+          <div class="history-time">${timeStr}</div>
+        `;
+        historyList.appendChild(div);
+      }
+    });
+  }
+
+  renderHistory();
 
   function openViewer() {
     const msgs = [];

@@ -1,85 +1,47 @@
 # Chrome Web Store Publishing Guide
 
-## Prerequisites
+## Quick Start (Lowest Friction)
 
-1. **Google Developer Account** ($5 one-time fee)
-   - Go to https://chrome.google.com/webstore/devconsole
-   - Sign in with your Google account
-   - Pay the one-time registration fee
+### 1. Get a Developer Account ($5 one-time)
+- Go to https://chrome.google.com/webstore/devconsole
+- Sign in with your Google account
+- Pay the one-time $5 registration fee
 
-2. **Prepare Extension Files**
-   - The extension is ready in this directory
-   - No external dependencies needed (all bundled)
+### 2. Upload the Ready-Made ZIP
+The file `discord-scraper-v1.4.0.zip` is already built and ready at:
+```
+/Users/paranjay/Developer/Discord Scraper/discord-scraper-v1.4.0.zip
+```
 
-## Package Extension for Upload
+Just drag and drop it into the Chrome Web Store Developer Dashboard.
 
-1. **Create a ZIP file** containing only these files:
-   ```
-   manifest.json
-   popup.html
-   popup.js
-   background.js
-   styles.css
-   jszip.min.js
-   icons/
-     icon16.png
-     icon48.png
-     icon128.png
-   viewer/
-     index.html
-   ```
-
-2. **Exclude these files**:
-   ```
-   node_modules/
-   .git/
-   viewer/ (if deploying separately)
-   *.md
-   IDEAS.md
-   CHROME-WEBSTORE.md
-   ```
-
-3. **ZIP command** (run from project root):
-   ```bash
-   zip -r discord-scraper.zip manifest.json popup.html popup.js background.js styles.css jszip.min.js icons/ viewer/
-   ```
-
-## Chrome Web Store Submission
-
-### Step 1: Access Developer Dashboard
-1. Go to https://chrome.google.com/webstore/devconsole
-2. Click "New Item" or "Add New Item"
-
-### Step 2: Upload ZIP
-1. Drag and drop `discord-scraper.zip` or click to upload
-2. Fill in the store listing
-
-### Step 3: Store Listing
+### 3. Fill in the Store Listing
 
 **Name**: Discord Media Scraper
+
 **Summary** (132 chars max):
 ```
 Scrape and download images, videos, files, and messages from any Discord channel with organized folders.
 ```
 
-**Description** (detailed):
+**Description** (copy-paste):
 ```
 Discord Media Scraper is a powerful tool for extracting content from Discord channels. Perfect for backing up servers, collecting media, or archiving important conversations.
 
 Features:
-• Multi-channel support - Select multiple channels to scrape at once
+• Multi-channel support with category grouping - Select multiple channels organized by category
 • 8 file type filters - Images, Videos, Archives, PDFs, Audio, Code, Documents, Messages
 • Organized downloads - Files are automatically organized by server/channel/type
 • Advanced filters - Filter by date range, author, or content search
 • Message export - Export chat history as JSON, CSV, or TXT
 • Storage estimate - See how much space files will take before downloading
-• Built-in viewer - View scraped content in a clean, organized interface
+• Built-in viewer - View scraped content in a clean, organized interface with chat, media, and grid views
 • Fast & reliable - API-based scraping gets ALL messages, not just visible ones
 
 How to use:
 1. Click the extension icon
 2. Get your token from Discord (auto-grab or paste manually)
-3. Select your server and channels
+3. Select your server and channels (grouped by category)
 4. Choose file types to download
 5. Click "Start Scraping"
 6. Click "Download All" to save files
@@ -87,59 +49,76 @@ How to use:
 Privacy: This extension only works with servers you have access to. Your token is stored locally and never sent anywhere except Discord's API.
 ```
 
-**Category**: Developer Tools (or Utilities)
+**Category**: Developer Tools
 **Language**: English
 
-### Step 4: Add Screenshots
-- Take 1-5 screenshots of the extension in action
-- Recommended size: 1280x800 or 640x400
-- Show: main interface, server selection, file type grid, download progress
+### 4. Privacy Practices
+Check these boxes:
+- ✅ "Does not collect user data"
+- ✅ "Does not use remote code"
 
-### Step 5: Privacy Practices
-- **Data Collection**: "This extension does not collect any user data"
-- **Remote Code**: "This extension does not include any remote code"
-- Check: "Does not collect user data"
-- Check: "Does not use remote code"
+**Data Collection disclosure**: "This extension does not collect any user data."
 
-### Step 6: Submit for Review
-1. Click "Submit for Review"
-2. Review typically takes 1-3 business days
+**Remote Code disclosure**: "This extension does not include any remote code."
 
-## Common Rejection Reasons (Avoid These)
+### 5. Screenshots
+Take 1-3 screenshots (1280x800 or 640x400):
+1. The main interface with server/channel selection
+2. The download types grid with category-grouped channels
+3. The viewer showing scraped content
 
-1. **Permission warnings**: Ensure `host_permissions` are clearly explained
-2. **Misleading descriptions**: Don't claim features you don't have
-3. **Privacy policy**: Not required for this extension (no data collection)
-4. **Single purpose**: Extension should have one clear purpose
+### 6. Submit
+Click "Submit for Review" — approval usually takes 1-3 business days.
 
-## Post-Approval
+---
 
-1. Extension will be live at:
-   `https://chrome.google.com/webstore/detail/discord-media-scraper/[extension-id]`
+## What's in the ZIP (v1.4.0)
 
-2. Share the link with users
+```
+discord-scraper-v1.4.0.zip (53KB)
+├── manifest.json          # MV3 manifest, v1.4.0
+├── popup.html             # Main extension UI
+├── popup.js               # Extension logic
+├── background.js          # Service worker (token interception, downloads)
+├── styles.css             # UI styles
+├── jszip.min.js           # ZIP library for bulk downloads
+├── icons/
+│   ├── icon16.png
+│   ├── icon48.png
+│   └── icon128.png
+└── viewer/
+    ├── index.html         # Local viewer (CSP-compliant)
+    ├── viewer.css         # Viewer styles
+    └── viewer.js          # Viewer logic
+```
 
-3. Monitor reviews and user feedback
+## Features in v1.4.0
 
-## Updating the Extension
+- **Channel categories**: Channels grouped by Discord category headers
+- **Two-column layout**: Uses full screen width when available
+- **CSP-compliant viewer**: Works in Chrome extension context (no CDN, no inline scripts)
+- **Multi-format viewer**: Supports JSON, TXT, CSV, HTML imports
+- **8 file type filters**: Images, Videos, Archives, PDFs, Audio, Code, Docs, Messages
+- **Organized downloads**: Files saved as `ServerName_ChannelName_type/filename`
+- **Detailed stats**: Total/avg/min/max file sizes after scraping
 
-1. Make changes to the code
-2. Increment version in `manifest.json`
-3. Create new ZIP
-4. Go to Developer Dashboard
-5. Click "Update" on your existing item
-6. Upload new ZIP
-7. Submit for review
+## After Approval
 
-## Tips
+Your extension will be live at:
+```
+https://chrome.google.com/webstore/detail/discord-media-scraper/[extension-id]
+```
 
-- **Test thoroughly** before submitting
-- **Use meaningful screenshots** that show the extension's value
-- **Write a clear description** that explains what the extension does
-- **Respond to user reviews** promptly
-- **Keep the extension updated** with bug fixes and features
+## Updating Later
 
-## Need Help?
+1. Make changes to code
+2. Bump version in `manifest.json`
+3. Create new ZIP: `zip -r discord-scraper-vX.Y.Z.zip manifest.json popup.html popup.js background.js styles.css jszip.min.js icons/ viewer/`
+4. Go to Developer Dashboard → your item → "Update"
+5. Upload new ZIP → Submit for review
 
-- Chrome Web Store Developer Documentation: https://developer.chrome.com/docs/webstore/
+## Resources
+
+- Chrome Web Store Developer Dashboard: https://chrome.google.com/webstore/devconsole
+- Chrome Web Store Docs: https://developer.chrome.com/docs/webstore/
 - Chrome Web Store Support: https://support.google.com/chrome_webstore/
